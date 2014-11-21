@@ -49,6 +49,7 @@
 #include <netinet/tcp.h>
 #include <unistd.h>
 
+#define CoTCPSocketBufferSize 65536
 
 int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t address_len, long timeout);
 
@@ -226,129 +227,73 @@ int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t addres
 	return YES;
 }
 
-- (long)sendBytes:(const void *)buf count:(long)count
+- (BOOL)writeData:(NSData *)theData
 {
-	long sent;
-	if ((sent = send(_sockfd, buf, count, 0)) < 0) {
-		_lastError = NEW_ERROR(errno, strerror(errno));
-	}
-	return sent;
+    const char * dataBytes = theData.bytes;
+    ssize_t index = 0;
+    
+    while (index < theData.length) {
+        ssize_t toWrite = MIN((theData.length - index), CoTCPSocketBufferSize);
+        
+        ssize_t wrote = send(_sockfd, &dataBytes[index], toWrite, 0);
+        
+        if (wrote < 0) {
+            _lastError = NEW_ERROR(errno, strerror(errno));
+            return NO;
+        }
+        
+        index += wrote;
+    }
+    
+    return YES;
 }
 
-- (long)sendData:(NSData *)data
+- (NSData *)readDataWithMaxLength:(NSUInteger)maxLength
 {
-    const char * dataBytes = [data bytes];
-    return [self sendBytes:dataBytes count:data.length];
+    if (maxLength == 0) return nil;
+    
+    char * readData = (char *)malloc(maxLength);
+    
+    ssize_t hasRead = 0;
+    while (hasRead < maxLength) {
+        ssize_t toRead = MIN( (maxLength - hasRead), CoTCPSocketBufferSize);
+        
+        ssize_t justRead = recv(_sockfd, &readData[hasRead], toRead, 0);
+        
+        if (justRead < 0) {
+            break;
+        }
+        
+        hasRead += justRead;
+    }
+    
+    NSData * theData = [NSData dataWithBytesNoCopy:readData length:hasRead freeWhenDone:YES];
+    return theData;
 }
 
-- (long)receiveBytes:(void *)buf limit:(long)limit {
-	long received = recv(_sockfd, buf, limit, 0);
-	if (received < 0) {
-		_lastError = NEW_ERROR(errno, strerror(errno));
-	}
-	return received;
-}
-
-- (BOOL)receiveBytes:(void *)buf count:(long)count {
-	while (count > 0) {
-		long received = [self receiveBytes:buf limit:count];
-		if (received < 1) {
-			break;
-		}
-		count -= received;
-		buf += received;
-	}
-	return (count == 0);
-}
-
-- (long)sendFile:(NSString *)path {
-	int fd = 0;
-	long sent = 0;
-	@try {
-		const char *cPath = [path fileSystemRepresentation];
-		if ((fd = open(cPath, O_RDONLY)) < 0) {
-			_lastError = NEW_ERROR(errno, strerror(errno));
-			return -1;
-		}
-		if (fcntl(fd, F_NOCACHE, 1) < 0) {
-			// Ignore because this will still work with disk caching on.
-		}
-		
-		long count;
-		while (1) {
-			count = read(fd, _buffer, _size);
-			if (count == 0) {
-				break; // Reached end of file.
-			}
-			if (count < 0) {
-				_lastError = NEW_ERROR(errno, strerror(errno));
-				break;
-			}
-			if ([self sendBytes:_buffer count:count] < 0) {
-				_lastError = NEW_ERROR(errno, strerror(errno));
-				break;
-			}
-			sent += count;
-		}
-	}
-	@finally {
-		close(fd);
-	}
-	return sent;
-}
-
-- (long)receiveFile:(NSString *)path length:(long)length {
-	return [self receiveFile:path length:length md5:nil];
-}
-
-- (long)receiveFile:(NSString *)path length:(long)length md5:(NSData **)outHash {
-	int fd = 0;
-	long remaining = length;
-	@try {
-		const char *cPath = [path fileSystemRepresentation];
-		if ((fd = open(cPath, O_WRONLY | O_CREAT | O_TRUNC, 0664)) < 0) {
-			_lastError = NEW_ERROR(errno, strerror(errno));
-			return -1;
-		}
-		if (fcntl(fd, F_NOCACHE, 1) < 0) {
-			// Ignore because this will still work with disk caching on.
-		}
-		
-		uint8_t digest[CC_MD5_DIGEST_LENGTH];
-		CC_MD5_CTX context;
-		if (outHash) {
-			CC_MD5_Init(&context);
-		}
-		
-		long received;
-		while (remaining > 0) {
-			received = [self receiveBytes:_buffer limit:MIN(length, _size)];
-			if (received == 0) {
-				break; // Peer closed the connection.
-			}
-			if (received < 0) {
-				_lastError = NEW_ERROR(errno, strerror(errno));
-				break;
-			}
-			if (write(fd, _buffer, received) < 0) {
-				_lastError = NEW_ERROR(errno, strerror(errno));
-				break;
-			}
-			if (outHash) {
-				CC_MD5_Update(&context, _buffer, (CC_LONG)received);
-			}
-			remaining -= received;
-		}
-		
-		if (outHash) {
-			CC_MD5_Final(digest, &context);
-			*outHash = [NSData dataWithBytes:digest length:CC_MD5_DIGEST_LENGTH];
-		}
-	}
-	@finally {
-		close(fd);
-	}
-	return (length - remaining);
+- (NSData *)readDataToLength:(NSUInteger)length
+{
+    if (length == 0) return nil;
+    
+    char * readData = (char *)malloc(length);
+    
+    ssize_t hasRead = 0;
+    while (hasRead < length) {
+        ssize_t toRead = MIN( (length - hasRead), CoTCPSocketBufferSize);
+        
+        ssize_t justRead = recv(_sockfd, &readData[hasRead], toRead, 0);
+        
+        if (justRead < 0) {
+            free(readData);
+            _lastError = NEW_ERROR(errno, strerror(errno));
+            return nil;
+        }
+        
+        hasRead += justRead;
+    }
+    
+    NSData * theData = [NSData dataWithBytesNoCopy:readData length:hasRead freeWhenDone:YES];
+    return theData;
 }
 
 #pragma mark Settings

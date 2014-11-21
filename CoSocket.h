@@ -110,21 +110,12 @@
 - (BOOL)close;
 
 /**
- Sends the specified number bytes from the given buffer.
- 
- @param buf   The buffer containing the bytes to send.
- @param count The number of bytes to send, typically the size of the buffer.
- @return The actual number of bytes sent.
- */
-- (long)sendBytes:(const void *)buf count:(long)count __attribute__((nonnull));
-
-/**
  Sends the specified number bytes from the given data.
  
  @param data   The data containing the bytes to send.
  @return The actual number of bytes sent.
  */
-- (long)sendData:(NSData *)data __attribute__((nonnull));
+- (BOOL)writeData:(NSData *)data;
 
 /**
  Receives an unpredictable number bytes up to the specified limit. Stores the bytes
@@ -134,7 +125,7 @@
  @param limit The maximum number of bytes to receive, typically the size of the buffer.
  @return The actual number of bytes received.
  */
-- (long)receiveBytes:(void *)buf limit:(long)limit __attribute__((nonnull));
+- (NSData *)readDataWithMaxLength:(NSUInteger)maxLength;
 
 /**
  Receives the exact number of bytes specified unless a timeout or other error occurs.
@@ -145,39 +136,7 @@
  @param count The exact number of bytes to receive, typically the size of the buffer.
  @return YES if the correct number of bytes was received, NO otherwise.
  */
-- (BOOL)receiveBytes:(void *)buf count:(long)count __attribute__((nonnull));
-
-/**
- Sends the contents of the file at the specified path. Uses an internal buffer to read
- a block of data from the file and send it over the network.
- 
- @param path The path of the file to send.
- @return The actual number of bytes sent.
- */
-- (long)sendFile:(NSString *)path __attribute__((nonnull));
-
-/**
- Receives a file with the given length and writes it to the specified path. Uses an
- internal buffer to receive a block of data from the network and write it to disk.
- Overwrites any existing file.
- 
- @param path   The path of the file to create.
- @param length The length of the file, measured in bytes.
- @return The actual number of bytes received.
- */
-- (long)receiveFile:(NSString *)path length:(long)length __attribute__((nonnull));
-
-/**
- Receives a file with the given length and writes it to the specified path and calculates
- its MD5 hash. The hash can be used for error checking. Uses an internal buffer to receive
- a block of data from the network and write it to disk. Overwrites any existing file.
- 
- @param path   The path of the file to create.
- @param length The length of the file, measured in bytes.
- @param hash   An optional data object in which to store the calculated MD5 hash of the file.
- @return The actual number of bytes received.
- */
-- (long)receiveFile:(NSString *)path length:(long)length md5:(NSData **)hash __attribute__((nonnull(1)));
+- (NSData *)readDataToLength:(NSUInteger)length;
 
 #pragma mark - Settings
 
