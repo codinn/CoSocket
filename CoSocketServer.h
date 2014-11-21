@@ -1,5 +1,5 @@
 //
-//  FastServerSocket.h
+//  CoSocketServer.h
 //  Copyright (c) 2011-2013 Daniel Reese <dan@danandcheryl.com>
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -23,8 +23,8 @@
 
 #import <Foundation/Foundation.h>
 
-@class FastSocket;
-@interface FastServerSocket : NSObject {
+@class CoSocket;
+@interface CoSocketServer : NSObject {
 @protected
 	long timeout;
 }
@@ -50,19 +50,19 @@
 #pragma mark - Initializers
 
 /**
- Returns an initialized FastSocketSocket object configured to connect to the given host name and port number.
+ Returns an initialized CoSocketSocket object configured to connect to the given host name and port number.
  
  @param port The port number on which to connect.
- @return An initialized FastSocketSocket object configured to connect to the given host name and port number.
+ @return An initialized CoSocketSocket object configured to connect to the given host name and port number.
  */
 - (id)initWithPort:(NSString *)port __attribute__((nonnull));
 
 /**
- Returns an initialized FastSocketSocket object configured to communicate throught the given file descriptor.
+ Returns an initialized CoSocketSocket object configured to communicate throught the given file descriptor.
  This method is primary used by a server socket to receive an incoming connection.
  
  @param fd The file descriptor to use for communication.
- @return An initialized FastSocketSocket object configured to communicate throught the given file descriptor.
+ @return An initialized CoSocketSocket object configured to communicate throught the given file descriptor.
  */
 - (id)initWithFileDescriptor:(int)fd;
 
@@ -80,7 +80,7 @@
  
  @return A socket connected to the remote host.
  */
-- (FastSocket *)accept;
+- (CoSocket *)accept;
 
 /**
  Closes the connection to the remote host.

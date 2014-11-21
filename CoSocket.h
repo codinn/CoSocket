@@ -1,5 +1,5 @@
 //
-//  FastSocket.h
+//  CoSocket.h
 //  Copyright (c) 2011-2013 Daniel Reese <dan@danandcheryl.com>
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -24,9 +24,9 @@
 #import <Foundation/Foundation.h>
 
 
-#define NEW_ERROR(num, str) [[NSError alloc] initWithDomain:@"FastSocketErrorDomain" code:(num) userInfo:[NSDictionary dictionaryWithObject:[NSString stringWithFormat:@"%s", (str)] forKey:NSLocalizedDescriptionKey]]
+#define NEW_ERROR(num, str) [[NSError alloc] initWithDomain:@"CoSocketErrorDomain" code:(num) userInfo:[NSDictionary dictionaryWithObject:[NSString stringWithFormat:@"%s", (str)] forKey:NSLocalizedDescriptionKey]]
 
-@interface FastSocket : NSObject
+@interface CoSocket : NSObject
 
 #pragma mark - Properties
 
@@ -43,7 +43,7 @@
 /**
  The port number of the remote machine.
  */
-@property (nonatomic, readonly) NSString *port;
+@property (nonatomic, readonly) uint16_t port;
 
 /**
  The last error that occured. This value is not set to nil after a successful call, so it is not
@@ -54,20 +54,20 @@
 #pragma mark - Initializers
 
 /**
- Returns an initialized FastSocket object configured to connect to the given host name and port number.
+ Returns an initialized CoSocket object configured to connect to the given host name and port number.
  
  @param host The host name of the remote host.
  @param port The port number on which to connect.
- @return An initialized FastSocket object configured to connect to the given host name and port number.
+ @return An initialized CoSocket object configured to connect to the given host name and port number.
  */
-- (id)initWithHost:(NSString *)host andPort:(NSString *)port __attribute__((nonnull));
+- (id)initWithHost:(NSString *)host onPort:(uint16_t)port __attribute__((nonnull));
 
 /**
- Returns an initialized FastSocket object configured to communicate throught the given file descriptor.
+ Returns an initialized CoSocket object configured to communicate throught the given file descriptor.
  This method is primary used by a server socket to receive an incoming connection.
  
  @param fd The file descriptor to use for communication.
- @return An initialized FastSocket object configured to communicate throught the given file descriptor.
+ @return An initialized CoSocket object configured to communicate throught the given file descriptor.
  */
 - (id)initWithFileDescriptor:(int)fd;
 
@@ -93,7 +93,7 @@
  @param timeout The maximum amount of time to wait for a connection to succeed.
  @return YES if the connection succeeded, NO otherwise.
  */
-- (BOOL)connect:(long)timeout;
+- (BOOL)connectWithTimeout:(NSTimeInterval)timeout;
 
 /**
  Returns whether the socket is currently connected.
@@ -117,6 +117,14 @@
  @return The actual number of bytes sent.
  */
 - (long)sendBytes:(const void *)buf count:(long)count __attribute__((nonnull));
+
+/**
+ Sends the specified number bytes from the given data.
+ 
+ @param data   The data containing the bytes to send.
+ @return The actual number of bytes sent.
+ */
+- (long)sendData:(NSData *)data __attribute__((nonnull));
 
 /**
  Receives an unpredictable number bytes up to the specified limit. Stores the bytes

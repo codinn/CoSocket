@@ -1,5 +1,5 @@
 //
-//  FastServerSocket.m
+//  CoSocketServer.m
 //  Copyright (c) 2011-2013 Daniel Reese <dan@danandcheryl.com>
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -22,13 +22,13 @@
 //
 
 
-#import "FastServerSocket.h"
-#import "FastSocket.h"
+#import "CoSocketServer.h"
+#import "CoSocket.h"
 #include <unistd.h>
 #include <netdb.h>
 #include <sys/socket.h>
 
-@implementation FastServerSocket
+@implementation CoSocketServer
 
 @synthesize sockfd;
 @synthesize port;
@@ -143,14 +143,14 @@
 	return YES;
 }
 
-- (FastSocket *)accept {
+- (CoSocket *)accept {
 	struct sockaddr_storage remoteAddr;
 	int clientfd = accept(sockfd, (struct sockaddr *)&remoteAddr, &(socklen_t){sizeof(remoteAddr)});
 	if (clientfd == -1) {
 		lastError = NEW_ERROR(errno, strerror(errno));
 		return nil;
 	}
-	return [[FastSocket alloc] initWithFileDescriptor:clientfd];
+	return [[CoSocket alloc] initWithFileDescriptor:clientfd];
 }
 
 #pragma mark Settings

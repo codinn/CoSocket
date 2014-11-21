@@ -1,5 +1,5 @@
 //
-//  FastSocket.m
+//  CoSocket.m
 //  Copyright (c) 2011-2013 Daniel Reese <dan@danandcheryl.com>
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -43,7 +43,7 @@
 //
 
 
-#import "FastSocket.h"
+#import "CoSocket.h"
 #import <CommonCrypto/CommonDigest.h>
 #include <netdb.h>
 #include <netinet/tcp.h>
@@ -53,7 +53,7 @@
 int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t address_len, long timeout);
 
 
-@interface FastSocket () {
+@interface CoSocket () {
 @protected
 	void *_buffer;
 	long _size;
@@ -63,13 +63,14 @@ int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t addres
 @end
 
 
-@implementation FastSocket
+@implementation CoSocket
 
-- (id)initWithHost:(NSString *)remoteHost andPort:(NSString *)remotePort {
+- (id)initWithHost:(NSString *)host onPort:(uint16_t)port
+{
 	if ((self = [super init])) {
 		_sockfd = 0;
-		_host = [remoteHost copy];
-		_port = [remotePort copy];
+		_host = [NSString copy];
+		_port = port;
 		_size = getpagesize() * 1448 / 4;
 		_buffer = valloc(_size);
 	}
@@ -122,11 +123,12 @@ int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t addres
 
 #pragma mark Actions
 
-- (BOOL)connect {
-	return [self connect:0];
+- (BOOL)connect
+{
+	return [self connectWithTimeout:0.0];
 }
 
-- (BOOL)connect:(long)nsec {
+- (BOOL)connectWithTimeout:(NSTimeInterval)nsec {
 	// Construct server address information.
 	struct addrinfo hints, *serverinfo, *p;
 	
@@ -134,7 +136,7 @@ int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t addres
 	hints.ai_family = AF_UNSPEC;
 	hints.ai_socktype = SOCK_STREAM;
 	
-	int error = getaddrinfo([_host UTF8String], [_port UTF8String], &hints, &serverinfo);
+	int error = getaddrinfo(_host.UTF8String, @(_port).stringValue.UTF8String, &hints, &serverinfo);
 	if (error) {
 		_lastError = NEW_ERROR(error, gai_strerror(error));
 		return NO;
@@ -224,12 +226,19 @@ int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t addres
 	return YES;
 }
 
-- (long)sendBytes:(const void *)buf count:(long)count {
+- (long)sendBytes:(const void *)buf count:(long)count
+{
 	long sent;
 	if ((sent = send(_sockfd, buf, count, 0)) < 0) {
 		_lastError = NEW_ERROR(errno, strerror(errno));
 	}
 	return sent;
+}
+
+- (long)sendData:(NSData *)data
+{
+    const char * dataBytes = [data bytes];
+    return [self sendBytes:dataBytes count:data.length];
 }
 
 - (long)receiveBytes:(void *)buf limit:(long)limit {
