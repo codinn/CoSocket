@@ -228,20 +228,54 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
 
 - (BOOL)writeData:(NSData *)theData
 {
+    fd_set writemask;
+    
+    if (theData.length <= 0) {
+        _lastError = NEW_ERROR(0, "Socket write data length must bigger than zero");
+        return nil;
+    }
+    
     const char * dataBytes = theData.bytes;
     ssize_t index = 0;
     
     while (index < theData.length) {
-        ssize_t toWrite = MIN((theData.length - index), CoTCPSocketBufferSize);
+        /* We must set all this information on each select we do */
+        FD_ZERO(&writemask);   /* empty readmask */
         
-        ssize_t wrote = send(_sockfd, &dataBytes[index], toWrite, 0);
+        /* Then we put all the descriptors we want to wait for in a */
+        /* mask = writemask */
+        FD_SET(_sockfd, &writemask);
         
-        if (wrote < 0) {
+        /* The first parameter is the biggest descriptor+1. The first one
+         was 0, so every other descriptor will be bigger.*/
+        /* readfds = we are not waiting for readfds */
+        /* writefds = &writemask */
+        /* exceptfds = we are not waiting for exception fds */
+        if (select(_sockfd+1, NULL, &writemask, NULL, &_timeout)==-1) {
             _lastError = NEW_ERROR(errno, strerror(errno));
-            return NO;
+            return nil;
         }
         
-        index += wrote;
+        
+        /* If something was received */
+        if (FD_ISSET(_sockfd, &writemask)) {
+            ssize_t toWrite = MIN((theData.length - index), _size);
+            
+            ssize_t wrote = send(_sockfd, &dataBytes[index], toWrite, 0);
+            
+            if (wrote == 0) {
+                // socket has been closed or shutdown for send
+                _lastError = NEW_ERROR(0, "Peer has closed the socket");
+                return NO;
+            }
+            
+            if (wrote < 0) {
+                _lastError = NEW_ERROR(errno, strerror(errno));
+                return NO;
+            }
+            
+            index += wrote;
+        }
     }
     
     return YES;
@@ -249,6 +283,7 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
 
 - (NSData *)readDataWithMaxLength:(NSUInteger)maxLength
 {
+    // todo: change to nonblocking
     if (maxLength == 0) return nil;
     
     char * readData = (char *)malloc(maxLength);
@@ -269,7 +304,10 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
 {
     fd_set readmask;
     
-    if (length == 0) return nil;
+    if (length == 0) {
+        _lastError = NEW_ERROR(0, "Socket read length must bigger than zero");
+        return nil;
+    }
     
     ssize_t hasRead = 0;
     while (hasRead < length) {
@@ -279,22 +317,28 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
         /* Then we put all the descriptors we want to wait for in a */
         /* mask = readmask */
         FD_SET(_sockfd, &readmask);
-        FD_SET(STDIN_FILENO, &readmask); /* STDIN_FILENO = 0 (standard input) */
-        /* Timeout, we will stop waiting for information */
         
         /* The first parameter is the biggest descriptor+1. The first one
          was 0, so every other descriptor will be bigger.*/
         /* readfds = &readmask */
         /* writefds = we are not waiting for writefds */
         /* exceptfds = we are not waiting for exception fds */
-        if (select(_sockfd+1, &readmask, NULL, NULL, &_timeout)==-1)
-            panic("Error on SELECT");
+        if (select(_sockfd+1, &readmask, NULL, NULL, &_timeout)==-1) {
+            _lastError = NEW_ERROR(errno, strerror(errno));
+            return nil;
+        }
         
         /* If something was received */
         if (FD_ISSET(_sockfd, &readmask)) {
             ssize_t toRead = MIN( (length - hasRead), _size);
             
             ssize_t justRead = recv(_sockfd, &_buffer[hasRead], toRead, 0);
+            
+            if (justRead == 0) {
+                // socket has been closed or shutdown for send
+                _lastError = NEW_ERROR(0, "Peer has closed the socket");
+                return nil;
+            }
             
             if (justRead < 0) {
                 _lastError = NEW_ERROR(errno, strerror(errno));
