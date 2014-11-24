@@ -153,19 +153,22 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
 	@try {
 		for (p = serverinfo; p != NULL; p = p->ai_next) {
 			if ((_sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) < 0) {
-				_lastError = NEW_ERROR(errno, strerror(errno));
+                _lastError = NEW_ERROR(errno, strerror(errno));
+                [self close];
 				return NO;
 			}
 			
 			// Instead of receiving a SIGPIPE signal, have write() return an error.
 			if (setsockopt(_sockfd, SOL_SOCKET, SO_NOSIGPIPE, &(int){1}, sizeof(int)) < 0) {
-				_lastError = NEW_ERROR(errno, strerror(errno));
+                _lastError = NEW_ERROR(errno, strerror(errno));
+                [self close];
 				return NO;
             }
 			
 			// Disable Nagle's algorithm.
 			if (setsockopt(_sockfd, IPPROTO_TCP, TCP_NODELAY, &(int){1}, sizeof(int)) < 0) {
-				_lastError = NEW_ERROR(errno, strerror(errno));
+                _lastError = NEW_ERROR(errno, strerror(errno));
+                [self close];
 				return NO;
 			}
 			
@@ -189,8 +192,10 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
 			// Found a working address, so move on.
 			break;
 		}
+        
 		if (p == NULL) {
-			_lastError = NEW_ERROR(1, "Could not contact server");
+            _lastError = NEW_ERROR(1, "Could not contact server");
+            [self close];
 			return NO;
 		}
 	}
@@ -215,9 +220,11 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
 
 - (BOOL)close {
 	if (_sockfd > 0 && close(_sockfd) < 0) {
-		_lastError = NEW_ERROR(errno, strerror(errno));
+		// _lastError = NEW_ERROR(errno, strerror(errno));
+        _sockfd = 0;
 		return NO;
 	}
+    
 	_sockfd = 0;
 	return YES;
 }
@@ -228,7 +235,8 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
     
     if (theData.length <= 0) {
         _lastError = NEW_ERROR(0, "Socket write data length must bigger than zero");
-        return nil;
+        [self close];
+        return NO;
     }
     
     const char * dataBytes = theData.bytes;
@@ -249,7 +257,8 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
         /* exceptfds = we are not waiting for exception fds */
         if (select(_sockfd+1, NULL, &writemask, NULL, &_timeout)==-1) {
             _lastError = NEW_ERROR(errno, strerror(errno));
-            return nil;
+            [self close];
+            return NO;
         }
         
         
@@ -262,11 +271,13 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
             if (wrote == 0) {
                 // socket has been closed or shutdown for send
                 _lastError = NEW_ERROR(0, "Peer has closed the socket");
+                [self close];
                 return NO;
             }
             
             if (wrote < 0) {
                 _lastError = NEW_ERROR(errno, strerror(errno));
+                [self close];
                 return NO;
             }
             
@@ -283,6 +294,7 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
     
     if (length == 0) {
         _lastError = NEW_ERROR(0, "Socket read length must bigger than zero");
+        [self close];
         return nil;
     }
     
@@ -302,6 +314,7 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
         /* exceptfds = we are not waiting for exception fds */
         if (select(_sockfd+1, &readmask, NULL, NULL, &_timeout)==-1) {
             _lastError = NEW_ERROR(errno, strerror(errno));
+            [self close];
             return nil;
         }
         
@@ -314,11 +327,13 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
             if (justRead == 0) {
                 // socket has been closed or shutdown for send
                 _lastError = NEW_ERROR(0, "Peer has closed the socket");
+                [self close];
                 return nil;
             }
             
             if (justRead < 0) {
                 _lastError = NEW_ERROR(errno, strerror(errno));
+                [self close];
                 return nil;
             }
             
