@@ -134,15 +134,6 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
 
 #pragma mark Actions
 
-- (int)dupSocketFD
-{
-    if (_sockfd > 0) {
-        return dup(_sockfd);
-    }
-    
-    return 0;
-}
-
 - (BOOL)connect
 {
 	// Construct server address information.
