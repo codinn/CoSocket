@@ -51,39 +51,54 @@
 
 #define CoTCPSocketBufferSize 65536
 
-int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t address_len, long timeout);
+static struct timeval get_timeval(NSTimeInterval interval);
+
+static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t address_len, NSTimeInterval timeout);
 
 
 @interface CoSocket () {
 @protected
 	void *_buffer;
 	long _size;
-	long _timeout;
-	int _segmentSize;
+    struct timeval _timeout;
 }
 @end
 
 
 @implementation CoSocket
 
-- (id)initWithHost:(NSString *)host onPort:(uint16_t)port
+
+- (instancetype)initWithHost:(NSString *)host onPort:(uint16_t)port
+{
+    return [self initWithHost:host onPort:port timeout:75.0];
+}
+
+- (instancetype)initWithHost:(NSString *)host onPort:(uint16_t)port timeout:(NSTimeInterval)timeout
 {
 	if ((self = [super init])) {
 		_sockfd = 0;
-		_host = [NSString copy];
+		_host = [host copy];
 		_port = port;
 		_size = getpagesize() * 1448 / 4;
 		_buffer = valloc(_size);
+        _timeout = get_timeval(timeout);
 	}
 	return self;
 }
 
-- (id)initWithFileDescriptor:(int)fd {
+- (instancetype)initWithFileDescriptor:(int)fd
+{
+    return [self initWithFileDescriptor:fd timeout:75.0];
+}
+
+- (instancetype)initWithFileDescriptor:(int)fd timeout:(NSTimeInterval)timeout
+{
 	if ((self = [super init])) {
 		// Assume the descriptor is an already connected socket.
 		_sockfd = fd;
 		_size = getpagesize() * 1448 / 4;
-		_buffer = valloc(_size);
+        _buffer = valloc(_size);
+        _timeout = get_timeval(timeout);
 		
 		// Instead of receiving a SIGPIPE signal, have write() return an error.
 		if (setsockopt(_sockfd, SOL_SOCKET, SO_NOSIGPIPE, &(int){1}, sizeof(int)) < 0) {
@@ -100,11 +115,6 @@ int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t addres
 		// Increase receive buffer size.
 		if (setsockopt(_sockfd, SOL_SOCKET, SO_RCVBUF, &_size, sizeof(_size)) < 0) {
 			// Ignore this because some systems have small hard limits.
-		}
-		
-		// Set timeout or segment size if requested.
-		if (_timeout && ![self setTimeout:_timeout]) {
-			return NO;
 		}
 	}
 	return self;
@@ -126,7 +136,7 @@ int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t addres
 
 - (BOOL)connect
 {
-	return [self connectWithTimeout:0.0];
+	return [self connectWithTimeout:75.0];  //  (default connect timeout is 75 seconds)
 }
 
 - (BOOL)connectWithTimeout:(NSTimeInterval)nsec {
@@ -155,7 +165,7 @@ int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t addres
 			if (setsockopt(_sockfd, SOL_SOCKET, SO_NOSIGPIPE, &(int){1}, sizeof(int)) < 0) {
 				_lastError = NEW_ERROR(errno, strerror(errno));
 				return NO;
-			}
+            }
 			
 			// Disable Nagle's algorithm.
 			if (setsockopt(_sockfd, IPPROTO_TCP, TCP_NODELAY, &(int){1}, sizeof(int)) < 0) {
@@ -167,29 +177,18 @@ int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t addres
 			if (setsockopt(_sockfd, SOL_SOCKET, SO_RCVBUF, &_size, sizeof(_size)) < 0) {
 				// Ignore this because some systems have small hard limits.
 			}
+            
+            // Get current flags to restore after.
+            int flags = fcntl(_sockfd, F_GETFL, 0);
+            
+            // Set socket to non-blocking.
+            fcntl(_sockfd, F_SETFL, flags | O_NONBLOCK);
 			
-			if (nsec) {
-				// Connect the socket using the given timeout.
-				if (connect_timeout(_sockfd, p->ai_addr, p->ai_addrlen, nsec) < 0) {
-					_lastError = NEW_ERROR(errno, strerror(errno));
-					continue;
-				}
-			}
-			else {
-				// Connect the socket (default connect timeout is 75 seconds).
-				if (connect(_sockfd, p->ai_addr, p->ai_addrlen) < 0) {
-					_lastError = NEW_ERROR(errno, strerror(errno));
-					continue;
-				}
-			}
-			
-			// Set timeout or segment size if requested.
-			if (_timeout && ![self setTimeout:_timeout]) {
-				return NO;
-			}
-			if (_segmentSize && ![self setSegmentSize:_segmentSize]) {
-				return NO;
-			}
+            // Connect the socket using the given timeout.
+            if (connect_timeout(_sockfd, p->ai_addr, p->ai_addrlen, nsec) < 0) {
+                _lastError = NEW_ERROR(errno, strerror(errno));
+                continue;
+            }
 			
 			// Found a working address, so move on.
 			break;
@@ -253,18 +252,13 @@ int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t addres
     if (maxLength == 0) return nil;
     
     char * readData = (char *)malloc(maxLength);
+
+    ssize_t toRead = MIN(maxLength, CoTCPSocketBufferSize);
     
-    ssize_t hasRead = 0;
-    while (hasRead < maxLength) {
-        ssize_t toRead = MIN( (maxLength - hasRead), CoTCPSocketBufferSize);
-        
-        ssize_t justRead = recv(_sockfd, &readData[hasRead], toRead, 0);
-        
-        if (justRead < 0) {
-            break;
-        }
-        
-        hasRead += justRead;
+    ssize_t hasRead = recv(_sockfd, &readData, toRead, 0);
+    
+    if (hasRead < 0) {
+        return nil;
     }
     
     NSData * theData = [NSData dataWithBytesNoCopy:readData length:hasRead freeWhenDone:YES];
@@ -273,61 +267,87 @@ int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t addres
 
 - (NSData *)readDataToLength:(NSUInteger)length
 {
-    if (length == 0) return nil;
+    fd_set readmask;
     
-    char * readData = (char *)malloc(length);
+    if (length == 0) return nil;
     
     ssize_t hasRead = 0;
     while (hasRead < length) {
-        ssize_t toRead = MIN( (length - hasRead), CoTCPSocketBufferSize);
+        /* We must set all this information on each select we do */
+        FD_ZERO(&readmask);   /* empty readmask */
         
-        ssize_t justRead = recv(_sockfd, &readData[hasRead], toRead, 0);
+        /* Then we put all the descriptors we want to wait for in a */
+        /* mask = readmask */
+        FD_SET(_sockfd, &readmask);
+        FD_SET(STDIN_FILENO, &readmask); /* STDIN_FILENO = 0 (standard input) */
+        /* Timeout, we will stop waiting for information */
         
-        if (justRead < 0) {
-            free(readData);
-            _lastError = NEW_ERROR(errno, strerror(errno));
-            return nil;
+        /* The first parameter is the biggest descriptor+1. The first one
+         was 0, so every other descriptor will be bigger.*/
+        /* readfds = &readmask */
+        /* writefds = we are not waiting for writefds */
+        /* exceptfds = we are not waiting for exception fds */
+        if (select(_sockfd+1, &readmask, NULL, NULL, &_timeout)==-1)
+            panic("Error on SELECT");
+        
+        /* If something was received */
+        if (FD_ISSET(_sockfd, &readmask)) {
+            ssize_t toRead = MIN( (length - hasRead), _size);
+            
+            ssize_t justRead = recv(_sockfd, &_buffer[hasRead], toRead, 0);
+            
+            if (justRead < 0) {
+                _lastError = NEW_ERROR(errno, strerror(errno));
+                return nil;
+            }
+            
+            hasRead += justRead;
         }
-        
-        hasRead += justRead;
     }
     
-    NSData * theData = [NSData dataWithBytesNoCopy:readData length:hasRead freeWhenDone:YES];
+    NSData * theData = [NSData dataWithBytes:_buffer length:hasRead];
     return theData;
 }
 
 #pragma mark Settings
 
-- (long)timeout {
+- (NSTimeInterval)timeout {
+    NSTimeInterval to = 0.0;
+    
 	if (_sockfd > 0) {
 		struct timeval tv;
 		if (getsockopt(_sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, &(socklen_t){sizeof(tv)}) < 0) {
 			_lastError = NEW_ERROR(errno, strerror(errno));
 			return NO;
 		}
-		_timeout = tv.tv_sec;
+        
+		to = tv.tv_sec + 1e-6 * tv.tv_usec;
 	}
-	return _timeout;
+    
+	return to;
 }
 
-- (BOOL)setTimeout:(long)seconds {
+- (BOOL)setTimeout:(NSTimeInterval)seconds {
 	if (_sockfd > 0) {
-		struct timeval tv = {seconds, 0};
+		struct timeval tv = get_timeval(seconds);
 		if (setsockopt(_sockfd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)) < 0 || setsockopt(_sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
 			_lastError = NEW_ERROR(errno, strerror(errno));
 			return NO;
 		}
 	}
-	_timeout = seconds;
+    
 	return YES;
 }
 
 - (int)segmentSize {
-	if (_sockfd > 0 && getsockopt(_sockfd, IPPROTO_TCP, TCP_MAXSEG, &_segmentSize, &(socklen_t){sizeof(_segmentSize)}) < 0) {
+    int bytes = 0;
+    
+	if (_sockfd > 0 && getsockopt(_sockfd, IPPROTO_TCP, TCP_MAXSEG, &bytes, &(socklen_t){sizeof(bytes)}) < 0) {
 		_lastError = NEW_ERROR(errno, strerror(errno));
-		return NO;
+		return -1;
 	}
-	return _segmentSize;
+    
+	return bytes;
 }
 
 - (BOOL)setSegmentSize:(int)bytes {
@@ -335,27 +355,27 @@ int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t addres
 		_lastError = NEW_ERROR(errno, strerror(errno));
 		return NO;
 	}
-	_segmentSize = bytes;
+
 	return YES;
 }
 
 @end
 
+static struct timeval get_timeval(NSTimeInterval interval)
+{
+    struct timeval tval;
+    tval.tv_sec = (int)floor(interval);
+    tval.tv_usec = (int)(1e6 * (interval - tval.tv_sec));
+    return tval;
+}
 
 /**
  This method is adapted from section 16.3 in Unix Network Programming (2003) by Richard Stevens et al.
  See http://books.google.com/books?id=ptSC4LpwGA0C&lpg=PP1&pg=PA448
  */
-int	connect_timeout(int sockfd, const struct sockaddr *address, socklen_t address_len, long timeout) {
-	fd_set rset, wset;
-	struct timeval tval;
+int	connect_timeout(int sockfd, const struct sockaddr *address, socklen_t address_len, NSTimeInterval timeout)
+{
 	int error = 0;
-	
-	// Get current flags to restore after.
-	int flags = fcntl(sockfd, F_GETFL, 0);
-	
-	// Set socket to non-blocking.
-	fcntl(sockfd, F_SETFL, flags | O_NONBLOCK);
 	
 	// Connect should return immediately in the "in progress" state.
 	int result = 0;
@@ -371,12 +391,13 @@ int	connect_timeout(int sockfd, const struct sockaddr *address, socklen_t addres
 	}
 	
 	// Call select() to wait for the connection.
-	// NOTE: If timeout is zero, then pass NULL in order to use default timeout. Zero seconds indicates no waiting.
+    // NOTE: If timeout is zero, then pass NULL in order to use default timeout. Zero seconds indicates no waiting.
+    fd_set rset, wset;
 	FD_ZERO(&rset);
 	FD_SET(sockfd, &rset);
 	wset = rset;
-	tval.tv_sec = timeout;
-	tval.tv_usec = 0;
+    
+    struct timeval tval = get_timeval(timeout);
 	if ((result = select(sockfd + 1, &rset, &wset, NULL, timeout ? &tval : NULL)) == 0) {
 		close(sockfd);
 		errno = ETIMEDOUT;
@@ -392,9 +413,6 @@ int	connect_timeout(int sockfd, const struct sockaddr *address, socklen_t addres
 	}
 	
 done:
-	// Restore original flags.
-	fcntl(sockfd, F_SETFL, flags);
-	
 	// NOTE: On some systems, getsockopt() will fail and set errno. On others, it will succeed and set the error parameter.
 	if (error) {
 		close(sockfd);

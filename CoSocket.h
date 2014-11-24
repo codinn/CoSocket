@@ -60,7 +60,8 @@
  @param port The port number on which to connect.
  @return An initialized CoSocket object configured to connect to the given host name and port number.
  */
-- (id)initWithHost:(NSString *)host onPort:(uint16_t)port __attribute__((nonnull));
+- (instancetype)initWithHost:(NSString *)host onPort:(uint16_t)port timeout:(NSTimeInterval)timeout;
+- (instancetype)initWithHost:(NSString *)host onPort:(uint16_t)port;
 
 /**
  Returns an initialized CoSocket object configured to communicate throught the given file descriptor.
@@ -69,7 +70,8 @@
  @param fd The file descriptor to use for communication.
  @return An initialized CoSocket object configured to communicate throught the given file descriptor.
  */
-- (id)initWithFileDescriptor:(int)fd;
+- (instancetype)initWithFileDescriptor:(int)fd timeout:(NSTimeInterval)timeout;
+- (instancetype)initWithFileDescriptor:(int)fd;
 
 /**
  Retrieves the internal buffer and its size for use outside the class. This buffer is good
@@ -146,7 +148,7 @@
  
  @return The current timeout value in seconds.
  */
-- (long)timeout;
+- (NSTimeInterval)timeout;
 
 /**
  Sets the number of seconds to wait without any network activity before giving up and
@@ -155,7 +157,7 @@
  @param seconds The number of seconds to wait before timing out.
  @return YES if the timeout value was set successfully, NO otherwise.
  */
-- (BOOL)setTimeout:(long)seconds;
+- (BOOL)setTimeout:(NSTimeInterval)seconds;
 
 /**
  Returns the maximum segment size. The segment size is the largest amount of
