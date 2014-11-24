@@ -134,6 +134,15 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
 
 #pragma mark Actions
 
+- (int)dupSocketFD
+{
+    if (_sockfd > 0) {
+        return dup(_sockfd);
+    }
+    
+    return 0;
+}
+
 - (BOOL)connect
 {
 	// Construct server address information.
@@ -205,7 +214,8 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
 	return YES;
 }
 
-- (BOOL)isConnected {
+- (BOOL)isConnected
+{
 	if (_sockfd == 0) {
 		return NO;
 	}
@@ -218,7 +228,8 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
 	return YES;
 }
 
-- (BOOL)close {
+- (BOOL)close
+{
 	if (_sockfd > 0 && close(_sockfd) < 0) {
 		// _lastError = NEW_ERROR(errno, strerror(errno));
         _sockfd = 0;

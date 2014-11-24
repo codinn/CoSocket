@@ -83,6 +83,8 @@
 
 #pragma mark - Actions
 
+- (int)dupSocketFD;
+
 /**
  Connect the socket to the remote host.
  
