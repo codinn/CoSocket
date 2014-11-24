@@ -123,6 +123,27 @@
  */
 - (NSData *)readDataToLength:(NSUInteger)length;
 
+/**
+ * Reads bytes until (and including) the passed "data" parameter, which acts as a separator.
+ *
+ * If you pass nil or zero-length data as the "data" parameter,
+ * the method will do nothing (except maybe print a warning), and the delegate will not be called.
+ *
+ * To read a line from the socket, use the line separator (e.g. CRLF for HTTP, see below) as the "data" parameter.
+ * If you're developing your own custom protocol, be sure your separator can not occur naturally as
+ * part of the data between separators.
+ * For example, imagine you want to send several small documents over a socket.
+ * Using CRLF as a separator is likely unwise, as a CRLF could easily exist within the documents.
+ * In this particular example, it would be better to use a protocol similar to HTTP with
+ * a header that includes the length of the document.
+ * Also be careful that your separator cannot occur naturally as part of the encoding for a character.
+ *
+ * The given data (separator) parameter should be immutable.
+ * For performance reasons, the socket will retain it, not copy it.
+ * So if it is immutable, don't modify it while the socket is using it.
+ **/
+- (NSData *)readDataToData:(NSData *)data;
+
 #pragma mark - Settings
 
 /**

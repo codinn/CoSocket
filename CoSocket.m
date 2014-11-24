@@ -345,6 +345,79 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
     return theData;
 }
 
+
+- (NSData *)readDataToData:(NSData *)data
+{
+    fd_set readmask;
+    
+    if (!data.length) {
+        _lastError = NEW_ERROR(0, "Socket passed nil or zero-length data as a separator");
+        [self close];
+        return nil;
+    }
+    
+    ssize_t hasRead     = 0;
+    
+    const char *separator   = (const char*)data.bytes;
+    NSUInteger cursor       = 0;
+    NSUInteger terminal     = data.length;
+    
+    while (cursor < terminal) {
+        /* We must set all this information on each select we do */
+        FD_ZERO(&readmask);   /* empty readmask */
+        
+        /* Then we put all the descriptors we want to wait for in a */
+        /* mask = readmask */
+        FD_SET(_sockfd, &readmask);
+        
+        /* The first parameter is the biggest descriptor+1. The first one
+         was 0, so every other descriptor will be bigger.*/
+        /* readfds = &readmask */
+        /* writefds = we are not waiting for writefds */
+        /* exceptfds = we are not waiting for exception fds */
+        if (select(_sockfd+1, &readmask, NULL, NULL, &_timeout)==-1) {
+            _lastError = NEW_ERROR(errno, strerror(errno));
+            [self close];
+            return nil;
+        }
+        
+        /* If something was received */
+        if (FD_ISSET(_sockfd, &readmask)) {
+            if ( hasRead >= _size ) {
+                _lastError = NEW_ERROR(255, "The separator could not be found in socket stream");
+                [self close];
+                return nil;
+            }
+            
+            ssize_t justRead = recv(_sockfd, &_buffer[hasRead], 1, 0);
+            
+            if (justRead == 0) {
+                // socket has been closed or shutdown for send
+                _lastError = NEW_ERROR(0, "Peer has closed the socket");
+                [self close];
+                return nil;
+            }
+            
+            if (justRead < 0) {
+                _lastError = NEW_ERROR(errno, strerror(errno));
+                [self close];
+                return nil;
+            }
+            
+            if ( ! ((const char*)_buffer)[hasRead] == separator[cursor]) {
+                cursor = 0;
+            } else {
+                cursor++;
+            }
+            
+            hasRead += justRead;
+        }
+    }
+    
+    NSData * theData = [NSData dataWithBytes:_buffer length:hasRead];
+    return theData;
+}
+
 #pragma mark Settings
 
 - (NSTimeInterval)timeout {
