@@ -53,7 +53,7 @@
 
 static struct timeval get_timeval(NSTimeInterval interval);
 
-static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t address_len, NSTimeInterval timeout);
+static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t address_len, struct timeval timeout);
 
 
 @interface CoSocket () {
@@ -136,10 +136,6 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
 
 - (BOOL)connect
 {
-	return [self connectWithTimeout:75.0];  //  (default connect timeout is 75 seconds)
-}
-
-- (BOOL)connectWithTimeout:(NSTimeInterval)nsec {
 	// Construct server address information.
 	struct addrinfo hints, *serverinfo, *p;
 	
@@ -185,7 +181,7 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
             fcntl(_sockfd, F_SETFL, flags | O_NONBLOCK);
 			
             // Connect the socket using the given timeout.
-            if (connect_timeout(_sockfd, p->ai_addr, p->ai_addrlen, nsec) < 0) {
+            if (connect_timeout(_sockfd, p->ai_addr, p->ai_addrlen, _timeout) < 0) {
                 _lastError = NEW_ERROR(errno, strerror(errno));
                 continue;
             }
@@ -279,25 +275,6 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
     }
     
     return YES;
-}
-
-- (NSData *)readDataWithMaxLength:(NSUInteger)maxLength
-{
-    // todo: change to nonblocking
-    if (maxLength == 0) return nil;
-    
-    char * readData = (char *)malloc(maxLength);
-
-    ssize_t toRead = MIN(maxLength, CoTCPSocketBufferSize);
-    
-    ssize_t hasRead = recv(_sockfd, &readData, toRead, 0);
-    
-    if (hasRead < 0) {
-        return nil;
-    }
-    
-    NSData * theData = [NSData dataWithBytesNoCopy:readData length:hasRead freeWhenDone:YES];
-    return theData;
 }
 
 - (NSData *)readDataToLength:(NSUInteger)length
@@ -417,7 +394,7 @@ static struct timeval get_timeval(NSTimeInterval interval)
  This method is adapted from section 16.3 in Unix Network Programming (2003) by Richard Stevens et al.
  See http://books.google.com/books?id=ptSC4LpwGA0C&lpg=PP1&pg=PA448
  */
-int	connect_timeout(int sockfd, const struct sockaddr *address, socklen_t address_len, NSTimeInterval timeout)
+static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t address_len, struct timeval timeout)
 {
 	int error = 0;
 	
@@ -441,8 +418,7 @@ int	connect_timeout(int sockfd, const struct sockaddr *address, socklen_t addres
 	FD_SET(sockfd, &rset);
 	wset = rset;
     
-    struct timeval tval = get_timeval(timeout);
-	if ((result = select(sockfd + 1, &rset, &wset, NULL, timeout ? &tval : NULL)) == 0) {
+	if ((result = select(sockfd + 1, &rset, &wset, NULL, &timeout)) == 0) {
 		close(sockfd);
 		errno = ETIMEDOUT;
 		return -1;

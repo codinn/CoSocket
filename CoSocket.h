@@ -58,6 +58,7 @@
  
  @param host The host name of the remote host.
  @param port The port number on which to connect.
+ @param timeout The maximum amount of time to wait for a connection to succeed.
  @return An initialized CoSocket object configured to connect to the given host name and port number.
  */
 - (instancetype)initWithHost:(NSString *)host onPort:(uint16_t)port timeout:(NSTimeInterval)timeout;
@@ -90,14 +91,6 @@
 - (BOOL)connect;
 
 /**
- Connect the socket to the remote host with the given timeout value.
- 
- @param timeout The maximum amount of time to wait for a connection to succeed.
- @return YES if the connection succeeded, NO otherwise.
- */
-- (BOOL)connectWithTimeout:(NSTimeInterval)timeout;
-
-/**
  Returns whether the socket is currently connected.
  
  @return YES if the socket is connected, NO otherwise.
@@ -118,16 +111,6 @@
  @return The actual number of bytes sent.
  */
 - (BOOL)writeData:(NSData *)data;
-
-/**
- Receives an unpredictable number bytes up to the specified limit. Stores the bytes
- in the given buffer and returns the actual number received.
- 
- @param buf   The buffer in which to store the bytes received.
- @param limit The maximum number of bytes to receive, typically the size of the buffer.
- @return The actual number of bytes received.
- */
-- (NSData *)readDataWithMaxLength:(NSUInteger)maxLength;
 
 /**
  Receives the exact number of bytes specified unless a timeout or other error occurs.
