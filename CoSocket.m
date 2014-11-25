@@ -436,10 +436,10 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
                 return nil;
             }
             
-            if ( ! ((const char*)_buffer)[hasRead] == separator[cursor]) {
-                cursor = 0;
-            } else {
+            if ( ((const char*)_buffer)[hasRead] == separator[cursor]) {
                 cursor++;
+            } else {
+                cursor = 0;
             }
             
             hasRead += justRead;
