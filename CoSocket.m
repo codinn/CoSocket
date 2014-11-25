@@ -60,7 +60,8 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
 @protected
 	void *_buffer;
 	long _size;
-    struct timeval _timeout;
+    NSTimeInterval _timeout;    // select() may update the timeout argument
+                                // to indicate how much time was left.
 }
 @end
 
@@ -81,7 +82,7 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
 		_port = port;
 		_size = getpagesize() * 1448 / 4;
 		_buffer = valloc(_size);
-        _timeout = get_timeval(timeout);
+        _timeout = timeout;
 	}
 	return self;
 }
@@ -98,7 +99,7 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
 		_sockfd = fd;
 		_size = getpagesize() * 1448 / 4;
         _buffer = valloc(_size);
-        _timeout = get_timeval(timeout);
+        _timeout = timeout;
 		
 		// Instead of receiving a SIGPIPE signal, have write() return an error.
 		if (setsockopt(_sockfd, SOL_SOCKET, SO_NOSIGPIPE, &(int){1}, sizeof(int)) < 0) {
@@ -183,8 +184,10 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
             // Set socket to non-blocking.
             fcntl(_sockfd, F_SETFL, flags | O_NONBLOCK);
 			
+            struct timeval timeout = get_timeval(_timeout);
+            
             // Connect the socket using the given timeout.
-            if (connect_timeout(_sockfd, p->ai_addr, p->ai_addrlen, _timeout) < 0) {
+            if (connect_timeout(_sockfd, p->ai_addr, p->ai_addrlen, timeout) < 0) {
                 _lastError = NEW_ERROR(errno, strerror(errno));
                 continue;
             }
@@ -244,6 +247,8 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
     const char * dataBytes = theData.bytes;
     ssize_t index = 0;
     
+    struct timeval timeout = get_timeval(_timeout);
+    
     while (index < theData.length) {
         /* We must set all this information on each select we do */
         FD_ZERO(&writemask);   /* empty readmask */
@@ -257,12 +262,19 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
         /* readfds = we are not waiting for readfds */
         /* writefds = &writemask */
         /* exceptfds = we are not waiting for exception fds */
-        if (select(_sockfd+1, NULL, &writemask, NULL, &_timeout)==-1) {
+        int select_result = select(_sockfd+1, NULL, &writemask, NULL, &timeout);
+        
+        if (select_result==-1) {
             _lastError = NEW_ERROR(errno, strerror(errno));
             [self close];
             return NO;
         }
         
+        if (select_result==0) {     // Timeout
+            _lastError = NEW_ERROR(ETIMEDOUT, "Socket write timed out");
+            [self close];
+            return NO;
+        }
         
         /* If something was received */
         if (FD_ISSET(_sockfd, &writemask)) {
@@ -300,6 +312,8 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
         return nil;
     }
     
+    struct timeval timeout = get_timeval(_timeout);
+    
     ssize_t hasRead = 0;
     while (hasRead < length) {
         /* We must set all this information on each select we do */
@@ -314,8 +328,15 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
         /* readfds = &readmask */
         /* writefds = we are not waiting for writefds */
         /* exceptfds = we are not waiting for exception fds */
-        if (select(_sockfd+1, &readmask, NULL, NULL, &_timeout)==-1) {
+        int select_result = select(_sockfd+1, &readmask, NULL, NULL, &timeout);
+        if (select_result==-1) {    // On error
             _lastError = NEW_ERROR(errno, strerror(errno));
+            [self close];
+            return nil;
+        }
+        
+        if (select_result==0) {     // Timeout
+            _lastError = NEW_ERROR(ETIMEDOUT, "Socket read timed out");
             [self close];
             return nil;
         }
@@ -364,6 +385,8 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
     NSUInteger cursor       = 0;
     NSUInteger terminal     = data.length;
     
+    struct timeval timeout = get_timeval(_timeout);
+    
     while (cursor < terminal) {
         /* We must set all this information on each select we do */
         FD_ZERO(&readmask);   /* empty readmask */
@@ -377,8 +400,15 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
         /* readfds = &readmask */
         /* writefds = we are not waiting for writefds */
         /* exceptfds = we are not waiting for exception fds */
-        if (select(_sockfd+1, &readmask, NULL, NULL, &_timeout)==-1) {
+        int select_result = select(_sockfd+1, &readmask, NULL, NULL, &timeout);
+        if (select_result==-1) {
             _lastError = NEW_ERROR(errno, strerror(errno));
+            [self close];
+            return nil;
+        }
+        
+        if (select_result==0) {     // Timeout
+            _lastError = NEW_ERROR(ETIMEDOUT, "Socket read timed out");
             [self close];
             return nil;
         }
@@ -508,7 +538,14 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
 	FD_SET(sockfd, &rset);
 	wset = rset;
     
-	if ((result = select(sockfd + 1, &rset, &wset, NULL, &timeout)) == 0) {
+    result = select(sockfd + 1, &rset, &wset, NULL, &timeout);
+    
+    if (result==-1) {
+        close(sockfd);
+        return -1;
+    }
+    
+	if (result == 0) {
 		close(sockfd);
 		errno = ETIMEDOUT;
 		return -1;
