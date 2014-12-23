@@ -22,6 +22,7 @@
 //
 
 #import <Foundation/Foundation.h>
+#include <sys/socket.h> // AF_INET, AF_INET6
 
 
 #define NEW_ERROR(num, str) [[NSError alloc] initWithDomain:@"CoSocketErrorDomain" code:(num) userInfo:[NSDictionary dictionaryWithObject:[NSString stringWithFormat:@"%s", (str)] forKey:NSLocalizedDescriptionKey]]
@@ -103,6 +104,25 @@
  @return YES if the close succeeded, NO otherwise.
  */
 - (BOOL)close;
+
+/**
+ Shutdown the connection to the remote host.
+ 
+ Close vs shutdown socket:
+ 
+ shutdown is a flexible way to block communication in one or both directions. When the second parameter is SHUT_RDWR, it will block both sending and receiving (like close). However, close is the way to actually destroy a socket.
+ 
+ With shutdown, you will still be able to receive pending data the peer already sent (thanks to Joey Adams for noting this).
+ 
+ Big difference between shutdown and close on a socket is the behavior when the socket is shared by other processes. A shutdown() affects all copies of the socket while close() affects only the file descriptor in one process.
+ 
+ Someone also had success under linux using shutdown() from one pthread to force another pthread currently blocked in connect() to abort early.
+ 
+ Under other OSes (OSX at least), I found calling close() was enough to get connect() fail.
+ 
+ @return YES if the close succeeded, NO otherwise.
+ */
+- (BOOL)shutdown;
 
 /**
  Sends the specified number bytes from the given data.
@@ -192,5 +212,42 @@
  @return YES if the segment size value was set successfully, NO otherwise.
  */
 - (BOOL)setSegmentSize:(int)bytes;
+
+#pragma mark Utilities
+
+/**
+ * The address lookup utility used by the class.
+ * This method is synchronous, so it's recommended you use it on a background thread/queue.
+ *
+ * The special strings "localhost" and "loopback" return the loopback address for IPv4 and IPv6.
+ *
+ * @returns
+ *   A mutable array with all IPv4 and IPv6 addresses returned by getaddrinfo.
+ *   The addresses are specifically for TCP connections.
+ *   You can filter the addresses, if needed, using the other utility methods provided by the class.
+ **/
++ (NSMutableArray *)lookupHost:(NSString *)host port:(uint16_t)port error:(NSError **)errPtr;
+
+/**
+ * Extracting host and port information from raw address data.
+ **/
+
++ (NSString *)hostFromAddress:(NSData *)address;
++ (uint16_t)portFromAddress:(NSData *)address;
+
++ (BOOL)isIPv4Address:(NSData *)address;
++ (BOOL)isIPv6Address:(NSData *)address;
+
++ (BOOL)getHost:(NSString **)hostPtr port:(uint16_t *)portPtr fromAddress:(NSData *)address;
+
++ (BOOL)getHost:(NSString **)hostPtr port:(uint16_t *)portPtr family:(sa_family_t *)afPtr fromAddress:(NSData *)address;
+
+/**
+ * A few common line separators, for use with the readDataToData:... methods.
+ **/
++ (NSData *)CRLFData;   // 0x0D0A
++ (NSData *)CRData;     // 0x0D
++ (NSData *)LFData;     // 0x0A
++ (NSData *)ZeroData;   // 0x00
 
 @end
