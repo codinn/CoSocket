@@ -1,4 +1,9 @@
 Copyright (c) 2011-2014 Daniel Reese <dan@danandcheryl.com>
+Copyright (c) 2014 Yang Yubo <yang@codinn.com>
+
+Some part of code is copied from GCDAsyncSocket project,
+which created by Robbie Hanson in Q4 2010.
+Updated and maintained by Deusty LLC and the Apple development community.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
