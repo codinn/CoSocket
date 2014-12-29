@@ -1,6 +1,11 @@
 //
 //  CoSocket.m
 //  Copyright (c) 2011-2013 Daniel Reese <dan@danandcheryl.com>
+//  Copyright (c) 2014 Yang Yubo <yang@codinn.com>
+//
+//  Some part of code is copied from GCDAsyncSocket project,
+//  which created by Robbie Hanson in Q4 2010.
+//  Updated and maintained by Deusty LLC and the Apple development community.
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy
 //  of this software and associated documentation files (the "Software"), to deal
@@ -60,9 +65,15 @@
 #import <sys/uio.h>
 #import <unistd.h>
 
+#define CoSocketErrorDomain @"CoSocketErrorDomain"
 #define CoTCPSocketBufferSize 65536
+#define SOCKET_NULL -1
 
 static struct timeval get_timeval(NSTimeInterval interval);
+
+#if 0
+static NSTimeInterval get_interval(struct timeval tv);
+#endif
 
 static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t address_len, struct timeval timeout);
 
@@ -72,7 +83,10 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
 	void *_buffer;
 	long _size;
     NSTimeInterval _timeout;    // select() may update the timeout argument
-                                // to indicate how much time was left.
+    // to indicate how much time was left.
+    
+    NSData * _connectInterface4;
+    NSData * _connectInterface6;
 }
 @end
 
@@ -80,189 +94,451 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
 @implementation CoSocket
 
 
-- (instancetype)initWithHost:(NSString *)host onPort:(uint16_t)port
-{
-    return [self initWithHost:host onPort:port timeout:75.0];
-}
-
-- (instancetype)initWithHost:(NSString *)host onPort:(uint16_t)port timeout:(NSTimeInterval)timeout
+- (instancetype)init
 {
 	if ((self = [super init])) {
-		_sockfd = 0;
-		_host = [host copy];
-		_port = port;
+		_socketFD = SOCKET_NULL;
 		_size = getpagesize() * 1448 / 4;
 		_buffer = valloc(_size);
-        _timeout = timeout;
+        _timeout = 0;
+        
+        self.IPv4Enabled = YES;
+        self.IPv6Enabled = YES;
+        self.IPv4PreferredOverIPv6 = YES;
 	}
 	return self;
-}
-
-- (instancetype)initWithFileDescriptor:(int)fd
-{
-    return [self initWithFileDescriptor:fd timeout:75.0];
-}
-
-- (instancetype)initWithFileDescriptor:(int)fd timeout:(NSTimeInterval)timeout
-{
-	if ((self = [super init])) {
-		// Assume the descriptor is an already connected socket.
-		_sockfd = fd;
-		_size = getpagesize() * 1448 / 4;
-        _buffer = valloc(_size);
-        _timeout = timeout;
-		
-		// Instead of receiving a SIGPIPE signal, have write() return an error.
-		if (setsockopt(_sockfd, SOL_SOCKET, SO_NOSIGPIPE, &(int){1}, sizeof(int)) < 0) {
-			_lastError = NEW_ERROR(errno, strerror(errno));
-			return NO;
-		}
-		
-		// Disable Nagle's algorithm.
-		if (setsockopt(_sockfd, IPPROTO_TCP, TCP_NODELAY, &(int){1}, sizeof(int)) < 0) {
-			_lastError = NEW_ERROR(errno, strerror(errno));
-			return NO;
-		}
-		
-		// Increase receive buffer size.
-		if (setsockopt(_sockfd, SOL_SOCKET, SO_RCVBUF, &_size, sizeof(_size)) < 0) {
-			// Ignore this because some systems have small hard limits.
-		}
-	}
-	return self;
-}
-
-- (void)buffer:(void **)outBuf size:(long *)outSize {
-	if (outBuf && outSize) {
-		*outBuf = _buffer;
-		*outSize = _size;
-	}
 }
 
 - (void)dealloc {
-	[self close];
+	[self disconnect];
 	free(_buffer);
 }
+///////////////////////////////////////////////////////////////////////////////////////////////////////////
+#pragma mark Errors
+///////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#pragma mark Actions
-
-- (BOOL)connect
++ (NSError *)gaiError:(int)gai_error
 {
-	// Construct server address information.
-	struct addrinfo hints, *serverinfo, *p;
-	
-	bzero(&hints, sizeof(hints));
-	hints.ai_family = AF_UNSPEC;
-	hints.ai_socktype = SOCK_STREAM;
-	
-	int error = getaddrinfo(_host.UTF8String, @(_port).stringValue.UTF8String, &hints, &serverinfo);
-	if (error) {
-		_lastError = NEW_ERROR(error, gai_strerror(error));
-		return NO;
-	}
-	
-	// Loop through the results and connect to the first we can.
-	@try {
-		for (p = serverinfo; p != NULL; p = p->ai_next) {
-			if ((_sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) < 0) {
-                _lastError = NEW_ERROR(errno, strerror(errno));
-                [self close];
-				return NO;
-			}
-			
-			// Instead of receiving a SIGPIPE signal, have write() return an error.
-			if (setsockopt(_sockfd, SOL_SOCKET, SO_NOSIGPIPE, &(int){1}, sizeof(int)) < 0) {
-                _lastError = NEW_ERROR(errno, strerror(errno));
-                [self close];
-				return NO;
-            }
-			
-			// Disable Nagle's algorithm.
-			if (setsockopt(_sockfd, IPPROTO_TCP, TCP_NODELAY, &(int){1}, sizeof(int)) < 0) {
-                _lastError = NEW_ERROR(errno, strerror(errno));
-                [self close];
-				return NO;
-			}
-			
-			// Increase receive buffer size.
-			if (setsockopt(_sockfd, SOL_SOCKET, SO_RCVBUF, &_size, sizeof(_size)) < 0) {
-				// Ignore this because some systems have small hard limits.
-			}
-            
-            // Get current flags to restore after.
-            int flags = fcntl(_sockfd, F_GETFL, 0);
-            
-            // Set socket to non-blocking.
-            fcntl(_sockfd, F_SETFL, flags | O_NONBLOCK);
-			
-            struct timeval timeout = get_timeval(_timeout);
-            
-            // Connect the socket using the given timeout.
-            if (connect_timeout(_sockfd, p->ai_addr, p->ai_addrlen, timeout) < 0) {
-                _lastError = NEW_ERROR(errno, strerror(errno));
-                continue;
-            }
-			
-			// Found a working address, so move on.
-			break;
-		}
-        
-		if (p == NULL) {
-            _lastError = NEW_ERROR(1, "Could not contact server");
-            [self close];
-			return NO;
-		}
-	}
-	@finally {
-		freeaddrinfo(serverinfo);
-	}
-	return YES;
-}
-
-- (BOOL)isConnected
-{
-	if (_sockfd == 0) {
-		return NO;
-	}
-	
-	struct sockaddr remoteAddr;
-	if (getpeername(_sockfd, &remoteAddr, &(socklen_t){sizeof(remoteAddr)}) < 0) {
-		_lastError = NEW_ERROR(errno, strerror(errno));
-		return NO;
-	}
-	return YES;
-}
-
-- (BOOL)close
-{
-	if (_sockfd > 0 && close(_sockfd) < 0) {
-		// _lastError = NEW_ERROR(errno, strerror(errno));
-        _sockfd = 0;
-		return NO;
-	}
+    NSString *errMsg = [NSString stringWithCString:gai_strerror(gai_error) encoding:NSASCIIStringEncoding];
+    NSDictionary *userInfo = [NSDictionary dictionaryWithObject:errMsg forKey:NSLocalizedDescriptionKey];
     
-	_sockfd = 0;
-	return YES;
+    return [NSError errorWithDomain:@"kCFStreamErrorDomainNetDB" code:gai_error userInfo:userInfo];
 }
 
-- (BOOL)shutdown
+- (NSError *)errnoErrorWithReason:(NSString *)reason
 {
-    if (_sockfd > 0 && shutdown(_sockfd, SHUT_RDWR) < 0) {
-        _sockfd = 0;
+    NSString *errMsg = [NSString stringWithUTF8String:strerror(errno)];
+    NSDictionary *userInfo = @{
+                               NSLocalizedDescriptionKey : errMsg,
+                               NSLocalizedFailureReasonErrorKey : reason,
+                               };
+    
+    return [NSError errorWithDomain:NSPOSIXErrorDomain code:errno userInfo:userInfo];
+}
+
+- (NSError *)errnoError
+{
+    NSString *errMsg = [NSString stringWithUTF8String:strerror(errno)];
+    NSDictionary *userInfo = @{
+                               NSLocalizedDescriptionKey : errMsg,
+                               };
+    
+    return [NSError errorWithDomain:NSPOSIXErrorDomain code:errno userInfo:userInfo];
+}
+
+- (NSError *)otherError:(NSString *)errMsg
+{
+    NSDictionary *userInfo = [NSDictionary dictionaryWithObject:errMsg forKey:NSLocalizedDescriptionKey];
+    
+    return [NSError errorWithDomain:CoSocketErrorDomain code:8 userInfo:userInfo];
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+#pragma mark Connecting
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+- (BOOL)preConnectWithInterface:(NSString *)interface error:(NSError **)errPtr
+{
+    if ([self isConnected]) // Must be disconnected
+    {
+        if (errPtr) {
+            NSString *msg = @"Attempting to connect while connected or accepting connections. Disconnect first.";
+            *errPtr = [self otherError:msg];
+        }
+        
         return NO;
     }
     
-    _sockfd = 0;
+    if (!self.isIPv4Enabled && !self.isIPv6Enabled) { // Must have IPv4 or IPv6 enabled
+        if (errPtr) {
+            NSString *msg = @"Both IPv4 and IPv6 have been disabled. Must enable at least one protocol first.";
+            *errPtr = [self otherError:msg];
+        }
+        return NO;
+    }
+    
+    if (interface) {
+        NSMutableData *interface4 = nil;
+        NSMutableData *interface6 = nil;
+        
+        [self getInterfaceAddress4:&interface4 address6:&interface6 fromDescription:interface port:0];
+        
+        if ((interface4 == nil) && (interface6 == nil)) {
+            if (errPtr) {
+                NSString *msg = @"Unknown interface. Specify valid interface by name (e.g. \"en1\") or IP address.";
+                *errPtr = [self otherError:msg];
+            }
+            return NO;
+        }
+        
+        if (!self.isIPv4Enabled && (interface6 == nil)) {
+            if (errPtr) {
+                NSString *msg = @"IPv4 has been disabled and specified interface doesn't support IPv6.";
+                *errPtr = [self otherError:msg];
+            }
+            return NO;
+        }
+        
+        if (!self.isIPv6Enabled && (interface4 == nil)) {
+            if (errPtr) {
+                NSString *msg = @"IPv6 has been disabled and specified interface doesn't support IPv4.";
+                *errPtr = [self otherError:msg];
+            }
+            return NO;
+        }
+        
+        _connectInterface4 = interface4;
+        _connectInterface6 = interface6;
+    }
+    
     return YES;
 }
 
-- (BOOL)writeData:(NSData *)theData
+
+- (BOOL)connectWithAddress4:(NSData *)address4 address6:(NSData *)address6 error:(NSError **)errPtr
+{
+    // Determine socket type
+    
+    BOOL preferIPv6 = !self.isIPv4PreferredOverIPv6;
+    
+    BOOL useIPv6 = ((preferIPv6 && address6) || (address4 == nil));
+    
+    // Create the socket
+    
+    NSData *address;
+    NSData *connectInterface;
+    
+    if (useIPv6) {
+        _socket6FD = socket(AF_INET6, SOCK_STREAM, 0);
+        _socketFD = _socket6FD;
+        
+        address = address6;
+        connectInterface = _connectInterface6;
+    } else {
+        _socket4FD = socket(AF_INET, SOCK_STREAM, 0);
+        _socketFD = _socket4FD;
+        
+        address = address4;
+        connectInterface = _connectInterface4;
+    }
+    
+    if (_socketFD == SOCKET_NULL) {
+        if (errPtr)
+            *errPtr = [self errnoErrorWithReason:@"Error in socket() function"];
+        
+        return NO;
+    }
+    
+    // Bind the socket to the desired interface (if needed)
+    
+    if (connectInterface)
+    {
+        if ([[self class] portFromAddress:connectInterface] > 0)
+        {
+            // Since we're going to be binding to a specific port,
+            // we should turn on reuseaddr to allow us to override sockets in time_wait.
+            
+            int reuseOn = 1;
+            setsockopt(_socketFD, SOL_SOCKET, SO_REUSEADDR, &reuseOn, sizeof(reuseOn));
+        }
+        
+        const struct sockaddr *interfaceAddr = (const struct sockaddr *)[connectInterface bytes];
+        
+        int result = bind(_socketFD, interfaceAddr, (socklen_t)[connectInterface length]);
+        if (result != 0)
+        {
+            if (errPtr)
+                *errPtr = [self errnoErrorWithReason:@"Error in bind() function"];
+            
+            return NO;
+        }
+    }
+    
+    // Instead of receiving a SIGPIPE signal, have write() return an error.
+    if (setsockopt(_socketFD, SOL_SOCKET, SO_NOSIGPIPE, &(int){1}, sizeof(int)) < 0) {
+        if (errPtr) *errPtr = [self errnoError];
+        [self disconnect];
+        return NO;
+    }
+    
+    // Disable Nagle's algorithm.
+    if (setsockopt(_socketFD, IPPROTO_TCP, TCP_NODELAY, &(int){1}, sizeof(int)) < 0) {
+        if (errPtr) *errPtr = [self errnoError];
+        [self disconnect];
+        return NO;
+    }
+    
+    // Increase receive buffer size.
+    if (setsockopt(_socketFD, SOL_SOCKET, SO_RCVBUF, &_size, sizeof(_size)) < 0) {
+        // Ignore this because some systems have small hard limits.
+    }
+    
+    // Get current flags to restore after.
+    int flags = fcntl(_socketFD, F_GETFL, 0);
+    
+    // Set socket to non-blocking.
+    fcntl(_socketFD, F_SETFL, flags | O_NONBLOCK);
+    
+    struct timeval timeout = get_timeval(_timeout);
+    
+    // Connect the socket using the given timeout.
+    if (connect_timeout(_socketFD, (const struct sockaddr *)[address bytes], (socklen_t)[address length], timeout) < 0) {
+        if (errPtr) *errPtr = [self errnoError];
+        [self disconnect];
+        return NO;
+    }
+    
+    return YES;
+}
+
+- (BOOL)connectToHost:(NSString*)host onPort:(uint16_t)port error:(NSError **)errPtr
+{
+    return [self connectToHost:host onPort:port withTimeout:-1 error:errPtr];
+}
+
+- (BOOL)connectToHost:(NSString *)host
+               onPort:(uint16_t)port
+          withTimeout:(NSTimeInterval)timeout
+                error:(NSError **)errPtr
+{
+    return [self connectToHost:host onPort:port viaInterface:nil withTimeout:timeout error:errPtr];
+}
+
+- (BOOL)connectToHost:(NSString *)inHost
+               onPort:(uint16_t)port
+         viaInterface:(NSString *)inInterface
+          withTimeout:(NSTimeInterval)timeout
+                error:(NSError **)errPtr
+{
+    _timeout = timeout;
+    
+    // Just in case immutable objects were passed
+    NSString *host = [inHost copy];
+    NSString *interface = [inInterface copy];
+    
+    // Check for problems with host parameter
+    
+    if ([host length] == 0)
+    {
+        NSString *msg = @"Invalid host parameter (nil or \"\"). Should be a domain name or IP address string.";
+        if (errPtr) *errPtr = [self otherError:msg];
+        
+        return NO;
+    }
+    
+    // Run through standard pre-connect checks
+    
+    if (![self preConnectWithInterface:interface error:errPtr]) {
+        return NO;
+    }
+    
+    // We've made it past all the checks.
+    // It's time to start the connection process.
+    
+    // It's possible that the given host parameter is actually a NSMutableString.
+    // So we want to copy it now, within this block that will be executed synchronously.
+    // This way the asynchronous lookup block below doesn't have to worry about it changing.
+    
+    NSString *hostCpy = [host copy];
+    
+    NSMutableArray *addresses = [self.class lookupHost:hostCpy port:port error:errPtr];
+    
+    if (*errPtr) {
+        [self disconnect];
+        return NO;
+    } else {
+        NSData *address4 = nil;
+        NSData *address6 = nil;
+        
+        for (NSData *address in addresses) {
+            if (!address4 && [self.class isIPv4Address:address]) {
+                address4 = address;
+            } else if (!address6 && [self.class isIPv6Address:address]) {
+                address6 = address;
+            }
+        }
+        
+        // Check for problems
+        
+        BOOL isIPv4Disabled = !self.isIPv4Enabled;
+        BOOL isIPv6Disabled = !self.isIPv6Enabled;
+        
+        if (isIPv4Disabled && (address6 == nil)) {
+            NSString *msg = @"IPv4 has been disabled and DNS lookup found no IPv6 address.";
+            if (errPtr) *errPtr = [self otherError:msg];
+            [self disconnect];
+            return NO;
+        }
+        
+        if (isIPv6Disabled && (address4 == nil)) {
+            NSString *msg = @"IPv6 has been disabled and DNS lookup found no IPv4 address.";
+            
+            if (errPtr) *errPtr = [self otherError:msg];
+            [self disconnect];
+            return NO;
+        }
+        
+        // Start the normal connection process
+        
+        if (![self connectWithAddress4:address4 address6:address6 error:errPtr]) {
+            [self disconnect];
+            return NO;
+        };
+    }
+    
+    return YES;
+}
+
+- (BOOL)connectToAddress:(NSData *)remoteAddr error:(NSError **)errPtr
+{
+    return [self connectToAddress:remoteAddr viaInterface:nil withTimeout:-1 error:errPtr];
+}
+
+- (BOOL)connectToAddress:(NSData *)remoteAddr withTimeout:(NSTimeInterval)timeout error:(NSError **)errPtr
+{
+    return [self connectToAddress:remoteAddr viaInterface:nil withTimeout:timeout error:errPtr];
+}
+
+- (BOOL)connectToAddress:(NSData *)inRemoteAddr
+            viaInterface:(NSString *)inInterface
+             withTimeout:(NSTimeInterval)timeout
+                   error:(NSError **)errPtr
+{
+    _timeout = timeout;
+    
+    // Just in case immutable objects were passed
+    NSData *remoteAddr = [inRemoteAddr copy];
+    NSString *interface = [inInterface copy];
+    
+    // Check for problems with remoteAddr parameter
+    
+    NSData *address4 = nil;
+    NSData *address6 = nil;
+    
+    if ([remoteAddr length] >= sizeof(struct sockaddr))
+    {
+        const struct sockaddr *sockaddr = (const struct sockaddr *)[remoteAddr bytes];
+        
+        if (sockaddr->sa_family == AF_INET)
+        {
+            if ([remoteAddr length] == sizeof(struct sockaddr_in))
+            {
+                address4 = remoteAddr;
+            }
+        }
+        else if (sockaddr->sa_family == AF_INET6)
+        {
+            if ([remoteAddr length] == sizeof(struct sockaddr_in6))
+            {
+                address6 = remoteAddr;
+            }
+        }
+    }
+    
+    if ((address4 == nil) && (address6 == nil))
+    {
+        NSString *msg = @"A valid IPv4 or IPv6 address was not given";
+        if (errPtr) *errPtr = [self otherError:msg];
+        
+        return NO;
+    }
+    
+    BOOL isIPv4Disabled = !self.isIPv4Enabled;
+    BOOL isIPv6Disabled = !self.isIPv6Enabled;
+    
+    if (isIPv4Disabled && (address4 != nil))
+    {
+        NSString *msg = @"IPv4 has been disabled and an IPv4 address was passed.";
+        if (errPtr) *errPtr = [self otherError:msg];
+        
+        return NO;
+    }
+    
+    if (isIPv6Disabled && (address6 != nil))
+    {
+        NSString *msg = @"IPv6 has been disabled and an IPv6 address was passed.";
+        if (errPtr) *errPtr = [self otherError:msg];
+        
+        return NO;
+    }
+    
+    // Run through standard pre-connect checks
+    
+    if (![self preConnectWithInterface:interface error:errPtr])
+    {
+        return NO;
+    }
+    
+    // We've made it past all the checks.
+    // It's time to start the connection process.
+    
+    if (![self connectWithAddress4:address4 address6:address6 error:errPtr])
+    {
+        return NO;
+    }
+    
+    return YES;
+}
+
+/**
+ Shutdown the connection to the remote host.
+ 
+ Close vs shutdown socket:
+ 
+ shutdown is a flexible way to block communication in one or both directions. When the second parameter is SHUT_RDWR, it will block both sending and receiving (like close). However, close is the way to actually destroy a socket.
+ 
+ With shutdown, you will still be able to receive pending data the peer already sent (thanks to Joey Adams for noting this).
+ 
+ Big difference between shutdown and close on a socket is the behavior when the socket is shared by other processes. A shutdown() affects all copies of the socket while close() affects only the file descriptor in one process.
+ 
+ Someone also had success under linux using shutdown() from one pthread to force another pthread currently blocked in connect() to abort early.
+ 
+ Under other OSes (OSX at least), I found calling close() was enough to get connect() fail.
+ */
+- (void)disconnect
+{
+    if (_socket4FD != SOCKET_NULL) {
+        shutdown(_socket4FD, SHUT_RDWR);
+        close(_socket4FD);
+        _socket4FD = SOCKET_NULL;
+    }
+    
+    if (_socket6FD != SOCKET_NULL) {
+        shutdown(_socket6FD, SHUT_RDWR);
+        close(_socket6FD);
+        _socket6FD = SOCKET_NULL;
+    }
+    
+    _socketFD = SOCKET_NULL;
+}
+
+- (BOOL)writeData:(NSData *)theData error:(NSError *__autoreleasing *)errPtr
 {
     fd_set writemask;
     
     if (theData.length <= 0) {
-        _lastError = NEW_ERROR(0, "Socket write data length must bigger than zero");
-        [self close];
+        if (errPtr) *errPtr = [self otherError:@"Socket write data length must bigger than zero"];
+        [self disconnect];
         return NO;
     }
     
@@ -277,43 +553,44 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
         
         /* Then we put all the descriptors we want to wait for in a */
         /* mask = writemask */
-        FD_SET(_sockfd, &writemask);
+        FD_SET(_socketFD, &writemask);
         
         /* The first parameter is the biggest descriptor+1. The first one
          was 0, so every other descriptor will be bigger.*/
         /* readfds = we are not waiting for readfds */
         /* writefds = &writemask */
         /* exceptfds = we are not waiting for exception fds */
-        int select_result = select(_sockfd+1, NULL, &writemask, NULL, &timeout);
+        int select_result = select(_socketFD+1, NULL, &writemask, NULL, &timeout);
         
         if (select_result==-1) {
-            _lastError = NEW_ERROR(errno, strerror(errno));
-            [self close];
+            if (errPtr) *errPtr = [self errnoError];
+            [self disconnect];
             return NO;
         }
         
         if (select_result==0) {     // Timeout
-            _lastError = NEW_ERROR(ETIMEDOUT, "Socket write timed out");
-            [self close];
+            // todo: ETIMEDOUT
+            if (errPtr) *errPtr = [self otherError:@"Socket write timed out"];
+            [self disconnect];
             return NO;
         }
         
         /* If something was received */
-        if (FD_ISSET(_sockfd, &writemask)) {
+        if (FD_ISSET(_socketFD, &writemask)) {
             ssize_t toWrite = MIN((theData.length - index), _size);
             
-            ssize_t wrote = send(_sockfd, &dataBytes[index], toWrite, 0);
+            ssize_t wrote = send(_socketFD, &dataBytes[index], toWrite, 0);
             
             if (wrote == 0) {
                 // socket has been closed or shutdown for send
-                _lastError = NEW_ERROR(0, "Peer has closed the socket");
-                [self close];
+                if (errPtr) *errPtr = [self otherError:@"Peer has closed the socket"];
+                [self disconnect];
                 return NO;
             }
             
             if (wrote < 0) {
-                _lastError = NEW_ERROR(errno, strerror(errno));
-                [self close];
+                if (errPtr) *errPtr = [self errnoError];
+                [self disconnect];
                 return NO;
             }
             
@@ -324,13 +601,13 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
     return YES;
 }
 
-- (NSData *)readDataToLength:(NSUInteger)length
+- (NSData *)readDataToLength:(NSUInteger)length error:(NSError *__autoreleasing *)errPtr
 {
     fd_set readmask;
     
     if (length == 0) {
-        _lastError = NEW_ERROR(0, "Socket read length must bigger than zero");
-        [self close];
+        if (errPtr) *errPtr = [self otherError:@"Socket read length must bigger than zero"];
+        [self disconnect];
         return nil;
     }
     
@@ -343,42 +620,43 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
         
         /* Then we put all the descriptors we want to wait for in a */
         /* mask = readmask */
-        FD_SET(_sockfd, &readmask);
+        FD_SET(_socketFD, &readmask);
         
         /* The first parameter is the biggest descriptor+1. The first one
          was 0, so every other descriptor will be bigger.*/
         /* readfds = &readmask */
         /* writefds = we are not waiting for writefds */
         /* exceptfds = we are not waiting for exception fds */
-        int select_result = select(_sockfd+1, &readmask, NULL, NULL, &timeout);
+        int select_result = select(_socketFD+1, &readmask, NULL, NULL, &timeout);
         if (select_result==-1) {    // On error
-            _lastError = NEW_ERROR(errno, strerror(errno));
-            [self close];
+            if (errPtr) *errPtr = [self errnoError];
+            [self disconnect];
             return nil;
         }
         
         if (select_result==0) {     // Timeout
-            _lastError = NEW_ERROR(ETIMEDOUT, "Socket read timed out");
-            [self close];
+            // todo: ETIMEDOUT
+            if (errPtr) *errPtr = [self otherError:@"Socket read timed out"];
+            [self disconnect];
             return nil;
         }
         
         /* If something was received */
-        if (FD_ISSET(_sockfd, &readmask)) {
+        if (FD_ISSET(_socketFD, &readmask)) {
             ssize_t toRead = MIN( (length - hasRead), _size);
             
-            ssize_t justRead = recv(_sockfd, &_buffer[hasRead], toRead, 0);
+            ssize_t justRead = recv(_socketFD, &_buffer[hasRead], toRead, 0);
             
             if (justRead == 0) {
                 // socket has been closed or shutdown for send
-                _lastError = NEW_ERROR(0, "Peer has closed the socket");
-                [self close];
+                if (errPtr) *errPtr = [self otherError:@"Peer has closed the socket"];
+                [self disconnect];
                 return nil;
             }
             
             if (justRead < 0) {
-                _lastError = NEW_ERROR(errno, strerror(errno));
-                [self close];
+                if (errPtr) *errPtr = [self errnoError];
+                [self disconnect];
                 return nil;
             }
             
@@ -391,13 +669,13 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
 }
 
 
-- (NSData *)readDataToData:(NSData *)data
+- (NSData *)readDataToData:(NSData *)data error:(NSError *__autoreleasing *)errPtr
 {
     fd_set readmask;
     
     if (!data.length) {
-        _lastError = NEW_ERROR(0, "Socket passed nil or zero-length data as a separator");
-        [self close];
+        if (errPtr) *errPtr = [self otherError:@"Socket passed nil or zero-length data as a separator"];
+        [self disconnect];
         return nil;
     }
     
@@ -415,46 +693,47 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
         
         /* Then we put all the descriptors we want to wait for in a */
         /* mask = readmask */
-        FD_SET(_sockfd, &readmask);
+        FD_SET(_socketFD, &readmask);
         
         /* The first parameter is the biggest descriptor+1. The first one
          was 0, so every other descriptor will be bigger.*/
         /* readfds = &readmask */
         /* writefds = we are not waiting for writefds */
         /* exceptfds = we are not waiting for exception fds */
-        int select_result = select(_sockfd+1, &readmask, NULL, NULL, &timeout);
+        int select_result = select(_socketFD+1, &readmask, NULL, NULL, &timeout);
         if (select_result==-1) {
-            _lastError = NEW_ERROR(errno, strerror(errno));
-            [self close];
+            if (errPtr) *errPtr = [self errnoError];
+            [self disconnect];
             return nil;
         }
         
         if (select_result==0) {     // Timeout
-            _lastError = NEW_ERROR(ETIMEDOUT, "Socket read timed out");
-            [self close];
+            // todo: ETIMEDOUT
+            if (errPtr) *errPtr = [self otherError:@"Socket read timed out"];
+            [self disconnect];
             return nil;
         }
         
         /* If something was received */
-        if (FD_ISSET(_sockfd, &readmask)) {
+        if (FD_ISSET(_socketFD, &readmask)) {
             if ( hasRead >= _size ) {
-                _lastError = NEW_ERROR(255, "The separator could not be found in socket stream");
-                [self close];
+                if (errPtr) *errPtr = [self otherError:@"The separator could not be found in socket stream"];
+                [self disconnect];
                 return nil;
             }
             
-            ssize_t justRead = recv(_sockfd, &_buffer[hasRead], 1, 0);
+            ssize_t justRead = recv(_socketFD, &_buffer[hasRead], 1, 0);
             
             if (justRead == 0) {
                 // socket has been closed or shutdown for send
-                _lastError = NEW_ERROR(0, "Peer has closed the socket");
-                [self close];
+                if (errPtr) *errPtr = [self otherError:@"Peer has closed the socket"];
+                [self disconnect];
                 return nil;
             }
             
             if (justRead < 0) {
-                _lastError = NEW_ERROR(errno, strerror(errno));
-                [self close];
+                if (errPtr) *errPtr = [self errnoError];
+                [self disconnect];
                 return nil;
             }
             
@@ -472,69 +751,458 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
     return theData;
 }
 
-#pragma mark Settings
+///////////////////////////////////////////////////////////////////////////////////////////////////////////
+#pragma mark Diagnostics
+///////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- (NSTimeInterval)timeout {
-    NSTimeInterval to = 0.0;
-    
-	if (_sockfd > 0) {
-		struct timeval tv;
-		if (getsockopt(_sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, &(socklen_t){sizeof(tv)}) < 0) {
-			_lastError = NEW_ERROR(errno, strerror(errno));
-			return NO;
-		}
-        
-		to = tv.tv_sec + 1e-6 * tv.tv_usec;
-	}
-    
-	return to;
-}
-
-- (BOOL)setTimeout:(NSTimeInterval)seconds {
-	if (_sockfd > 0) {
-		struct timeval tv = get_timeval(seconds);
-		if (setsockopt(_sockfd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)) < 0 || setsockopt(_sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
-			_lastError = NEW_ERROR(errno, strerror(errno));
-			return NO;
-		}
-	}
-    
-	return YES;
-}
-
-- (int)segmentSize {
-    int bytes = 0;
-    
-	if (_sockfd > 0 && getsockopt(_sockfd, IPPROTO_TCP, TCP_MAXSEG, &bytes, &(socklen_t){sizeof(bytes)}) < 0) {
-		_lastError = NEW_ERROR(errno, strerror(errno));
-		return -1;
-	}
-    
-	return bytes;
-}
-
-- (BOOL)setSegmentSize:(int)bytes {
-	if (_sockfd > 0 && setsockopt(_sockfd, IPPROTO_TCP, TCP_MAXSEG, &bytes, sizeof(bytes)) < 0) {
-		_lastError = NEW_ERROR(errno, strerror(errno));
-		return NO;
-	}
-
-	return YES;
-}
-
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////
-#pragma mark Class Utilities
-// stolen from https://github.com/robbiehanson/CocoaAsyncSocket/ public domain code
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-+ (NSError *)gaiError:(int)gai_error
+- (BOOL)isConnected
 {
-    NSString *errMsg = [NSString stringWithCString:gai_strerror(gai_error) encoding:NSASCIIStringEncoding];
-    NSDictionary *userInfo = [NSDictionary dictionaryWithObject:errMsg forKey:NSLocalizedDescriptionKey];
-    
-    return [NSError errorWithDomain:@"kCFStreamErrorDomainNetDB" code:gai_error userInfo:userInfo];
+    int error = 0;
+    socklen_t len = sizeof (error);
+    int retval = getsockopt (_socketFD, SOL_SOCKET, SO_ERROR, &error, &len );
+    return retval==0;
 }
+
+- (NSString *)connectedHost
+{
+    if (_socket4FD != SOCKET_NULL)
+        return [self connectedHostFromSocket4:_socket4FD];
+    
+    if (_socket6FD != SOCKET_NULL)
+        return [self connectedHostFromSocket6:_socket6FD];
+    
+    return nil;
+}
+
+- (uint16_t)connectedPort
+{
+    if (_socket4FD != SOCKET_NULL)
+        return [self connectedPortFromSocket4:_socket4FD];
+    
+    if (_socket6FD != SOCKET_NULL)
+        return [self connectedPortFromSocket6:_socket6FD];
+    
+    return 0;
+}
+
+- (NSString *)localHost
+{
+    if (_socket4FD != SOCKET_NULL)
+        return [self localHostFromSocket4:_socket4FD];
+    
+    if (_socket6FD != SOCKET_NULL)
+        return [self localHostFromSocket6:_socket6FD];
+    
+    return nil;
+}
+
+- (uint16_t)localPort
+{
+    if (_socket4FD != SOCKET_NULL)
+        return [self localPortFromSocket4:_socket4FD];
+    if (_socket6FD != SOCKET_NULL)
+        return [self localPortFromSocket6:_socket6FD];
+    
+    return 0;
+}
+
+- (NSString *)connectedHost4
+{
+    if (_socket4FD != SOCKET_NULL)
+        return [self connectedHostFromSocket4:_socket4FD];
+    
+    return nil;
+}
+
+- (NSString *)connectedHost6
+{
+    if (_socket6FD != SOCKET_NULL)
+        return [self connectedHostFromSocket6:_socket6FD];
+    
+    return nil;
+}
+
+- (uint16_t)connectedPort4
+{
+    if (_socket4FD != SOCKET_NULL)
+        return [self connectedPortFromSocket4:_socket4FD];
+    
+    return 0;
+}
+
+- (uint16_t)connectedPort6
+{
+    if (_socket6FD != SOCKET_NULL)
+        return [self connectedPortFromSocket6:_socket6FD];
+    
+    return 0;
+}
+
+- (NSString *)localHost4
+{
+    if (_socket4FD != SOCKET_NULL)
+        return [self localHostFromSocket4:_socket4FD];
+    
+    return nil;
+}
+
+- (NSString *)localHost6
+{
+    if (_socket6FD != SOCKET_NULL)
+        return [self localHostFromSocket6:_socket6FD];
+    
+    return nil;
+}
+
+- (uint16_t)localPort4
+{
+    if (_socket4FD != SOCKET_NULL)
+        return [self localPortFromSocket4:_socket4FD];
+    
+    return 0;
+}
+
+- (uint16_t)localPort6
+{
+    if (_socket6FD != SOCKET_NULL)
+        return [self localPortFromSocket6:_socket6FD];
+    
+    return 0;
+}
+
+- (NSString *)connectedHostFromSocket4:(int)socketFD
+{
+    struct sockaddr_in sockaddr4;
+    socklen_t sockaddr4len = sizeof(sockaddr4);
+    
+    if (getpeername(socketFD, (struct sockaddr *)&sockaddr4, &sockaddr4len) < 0)
+    {
+        return nil;
+    }
+    return [[self class] hostFromSockaddr4:&sockaddr4];
+}
+
+- (NSString *)connectedHostFromSocket6:(int)socketFD
+{
+    struct sockaddr_in6 sockaddr6;
+    socklen_t sockaddr6len = sizeof(sockaddr6);
+    
+    if (getpeername(socketFD, (struct sockaddr *)&sockaddr6, &sockaddr6len) < 0)
+    {
+        return nil;
+    }
+    return [[self class] hostFromSockaddr6:&sockaddr6];
+}
+
+- (uint16_t)connectedPortFromSocket4:(int)socketFD
+{
+    struct sockaddr_in sockaddr4;
+    socklen_t sockaddr4len = sizeof(sockaddr4);
+    
+    if (getpeername(socketFD, (struct sockaddr *)&sockaddr4, &sockaddr4len) < 0)
+    {
+        return 0;
+    }
+    return [[self class] portFromSockaddr4:&sockaddr4];
+}
+
+- (uint16_t)connectedPortFromSocket6:(int)socketFD
+{
+    struct sockaddr_in6 sockaddr6;
+    socklen_t sockaddr6len = sizeof(sockaddr6);
+    
+    if (getpeername(socketFD, (struct sockaddr *)&sockaddr6, &sockaddr6len) < 0)
+    {
+        return 0;
+    }
+    return [[self class] portFromSockaddr6:&sockaddr6];
+}
+
+- (NSString *)localHostFromSocket4:(int)socketFD
+{
+    struct sockaddr_in sockaddr4;
+    socklen_t sockaddr4len = sizeof(sockaddr4);
+    
+    if (getsockname(socketFD, (struct sockaddr *)&sockaddr4, &sockaddr4len) < 0)
+    {
+        return nil;
+    }
+    return [[self class] hostFromSockaddr4:&sockaddr4];
+}
+
+- (NSString *)localHostFromSocket6:(int)socketFD
+{
+    struct sockaddr_in6 sockaddr6;
+    socklen_t sockaddr6len = sizeof(sockaddr6);
+    
+    if (getsockname(socketFD, (struct sockaddr *)&sockaddr6, &sockaddr6len) < 0)
+    {
+        return nil;
+    }
+    return [[self class] hostFromSockaddr6:&sockaddr6];
+}
+
+- (uint16_t)localPortFromSocket4:(int)socketFD
+{
+    struct sockaddr_in sockaddr4;
+    socklen_t sockaddr4len = sizeof(sockaddr4);
+    
+    if (getsockname(socketFD, (struct sockaddr *)&sockaddr4, &sockaddr4len) < 0)
+    {
+        return 0;
+    }
+    return [[self class] portFromSockaddr4:&sockaddr4];
+}
+
+- (uint16_t)localPortFromSocket6:(int)socketFD
+{
+    struct sockaddr_in6 sockaddr6;
+    socklen_t sockaddr6len = sizeof(sockaddr6);
+    
+    if (getsockname(socketFD, (struct sockaddr *)&sockaddr6, &sockaddr6len) < 0)
+    {
+        return 0;
+    }
+    return [[self class] portFromSockaddr6:&sockaddr6];
+}
+
+- (NSData *)connectedAddress
+{
+    NSData *result = nil;
+    
+    if (_socket4FD != SOCKET_NULL) {
+        struct sockaddr_in sockaddr4;
+        socklen_t sockaddr4len = sizeof(sockaddr4);
+        
+        if (getpeername(_socket4FD, (struct sockaddr *)&sockaddr4, &sockaddr4len) == 0) {
+            result = [[NSData alloc] initWithBytes:&sockaddr4 length:sockaddr4len];
+        }
+    }
+    
+    if (_socket6FD != SOCKET_NULL) {
+        struct sockaddr_in6 sockaddr6;
+        socklen_t sockaddr6len = sizeof(sockaddr6);
+        
+        if (getpeername(_socket6FD, (struct sockaddr *)&sockaddr6, &sockaddr6len) == 0) {
+            result = [[NSData alloc] initWithBytes:&sockaddr6 length:sockaddr6len];
+        }
+    }
+    
+    return result;
+}
+
+- (NSData *)localAddress
+{
+    NSData *result = nil;
+    
+    if (_socket4FD != SOCKET_NULL) {
+        struct sockaddr_in sockaddr4;
+        socklen_t sockaddr4len = sizeof(sockaddr4);
+        
+        if (getsockname(_socket4FD, (struct sockaddr *)&sockaddr4, &sockaddr4len) == 0) {
+            result = [[NSData alloc] initWithBytes:&sockaddr4 length:sockaddr4len];
+        }
+    }
+    
+    if (_socket6FD != SOCKET_NULL) {
+        struct sockaddr_in6 sockaddr6;
+        socklen_t sockaddr6len = sizeof(sockaddr6);
+        
+        if (getsockname(_socket6FD, (struct sockaddr *)&sockaddr6, &sockaddr6len) == 0) {
+            result = [[NSData alloc] initWithBytes:&sockaddr6 length:sockaddr6len];
+        }
+    }
+    
+    return result;
+}
+
+- (BOOL)isIPv4
+{
+    return (_socket4FD != SOCKET_NULL);
+}
+
+- (BOOL)isIPv6
+{
+    return (_socket6FD != SOCKET_NULL);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////
+#pragma mark Utilities
+///////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/**
+ * Finds the address of an interface description.
+ * An inteface description may be an interface name (en0, en1, lo0) or corresponding IP (192.168.4.34).
+ *
+ * The interface description may optionally contain a port number at the end, separated by a colon.
+ * If a non-zero port parameter is provided, any port number in the interface description is ignored.
+ *
+ * The returned value is a 'struct sockaddr' wrapped in an NSMutableData object.
+ **/
+- (void)getInterfaceAddress4:(NSMutableData **)interfaceAddr4Ptr
+                    address6:(NSMutableData **)interfaceAddr6Ptr
+             fromDescription:(NSString *)interfaceDescription
+                        port:(uint16_t)port
+{
+    NSMutableData *addr4 = nil;
+    NSMutableData *addr6 = nil;
+    
+    NSString *interface = nil;
+    
+    NSArray *components = [interfaceDescription componentsSeparatedByString:@":"];
+    if ([components count] > 0)
+    {
+        NSString *temp = [components objectAtIndex:0];
+        if ([temp length] > 0)
+        {
+            interface = temp;
+        }
+    }
+    if ([components count] > 1 && port == 0)
+    {
+        long portL = strtol([[components objectAtIndex:1] UTF8String], NULL, 10);
+        
+        if (portL > 0 && portL <= UINT16_MAX)
+        {
+            port = (uint16_t)portL;
+        }
+    }
+    
+    if (interface == nil)
+    {
+        // ANY address
+        
+        struct sockaddr_in sockaddr4;
+        memset(&sockaddr4, 0, sizeof(sockaddr4));
+        
+        sockaddr4.sin_len         = sizeof(sockaddr4);
+        sockaddr4.sin_family      = AF_INET;
+        sockaddr4.sin_port        = htons(port);
+        sockaddr4.sin_addr.s_addr = htonl(INADDR_ANY);
+        
+        struct sockaddr_in6 sockaddr6;
+        memset(&sockaddr6, 0, sizeof(sockaddr6));
+        
+        sockaddr6.sin6_len       = sizeof(sockaddr6);
+        sockaddr6.sin6_family    = AF_INET6;
+        sockaddr6.sin6_port      = htons(port);
+        sockaddr6.sin6_addr      = in6addr_any;
+        
+        addr4 = [NSMutableData dataWithBytes:&sockaddr4 length:sizeof(sockaddr4)];
+        addr6 = [NSMutableData dataWithBytes:&sockaddr6 length:sizeof(sockaddr6)];
+    }
+    else if ([interface isEqualToString:@"localhost"] || [interface isEqualToString:@"loopback"])
+    {
+        // LOOPBACK address
+        
+        struct sockaddr_in sockaddr4;
+        memset(&sockaddr4, 0, sizeof(sockaddr4));
+        
+        sockaddr4.sin_len         = sizeof(sockaddr4);
+        sockaddr4.sin_family      = AF_INET;
+        sockaddr4.sin_port        = htons(port);
+        sockaddr4.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        
+        struct sockaddr_in6 sockaddr6;
+        memset(&sockaddr6, 0, sizeof(sockaddr6));
+        
+        sockaddr6.sin6_len       = sizeof(sockaddr6);
+        sockaddr6.sin6_family    = AF_INET6;
+        sockaddr6.sin6_port      = htons(port);
+        sockaddr6.sin6_addr      = in6addr_loopback;
+        
+        addr4 = [NSMutableData dataWithBytes:&sockaddr4 length:sizeof(sockaddr4)];
+        addr6 = [NSMutableData dataWithBytes:&sockaddr6 length:sizeof(sockaddr6)];
+    }
+    else
+    {
+        const char *iface = [interface UTF8String];
+        
+        struct ifaddrs *addrs;
+        const struct ifaddrs *cursor;
+        
+        if ((getifaddrs(&addrs) == 0))
+        {
+            cursor = addrs;
+            while (cursor != NULL)
+            {
+                if ((addr4 == nil) && (cursor->ifa_addr->sa_family == AF_INET))
+                {
+                    // IPv4
+                    
+                    struct sockaddr_in nativeAddr4;
+                    memcpy(&nativeAddr4, cursor->ifa_addr, sizeof(nativeAddr4));
+                    
+                    if (strcmp(cursor->ifa_name, iface) == 0)
+                    {
+                        // Name match
+                        
+                        nativeAddr4.sin_port = htons(port);
+                        
+                        addr4 = [NSMutableData dataWithBytes:&nativeAddr4 length:sizeof(nativeAddr4)];
+                    }
+                    else
+                    {
+                        char ip[INET_ADDRSTRLEN];
+                        
+                        const char *conversion = inet_ntop(AF_INET, &nativeAddr4.sin_addr, ip, sizeof(ip));
+                        
+                        if ((conversion != NULL) && (strcmp(ip, iface) == 0))
+                        {
+                            // IP match
+                            
+                            nativeAddr4.sin_port = htons(port);
+                            
+                            addr4 = [NSMutableData dataWithBytes:&nativeAddr4 length:sizeof(nativeAddr4)];
+                        }
+                    }
+                }
+                else if ((addr6 == nil) && (cursor->ifa_addr->sa_family == AF_INET6))
+                {
+                    // IPv6
+                    
+                    struct sockaddr_in6 nativeAddr6;
+                    memcpy(&nativeAddr6, cursor->ifa_addr, sizeof(nativeAddr6));
+                    
+                    if (strcmp(cursor->ifa_name, iface) == 0)
+                    {
+                        // Name match
+                        
+                        nativeAddr6.sin6_port = htons(port);
+                        
+                        addr6 = [NSMutableData dataWithBytes:&nativeAddr6 length:sizeof(nativeAddr6)];
+                    }
+                    else
+                    {
+                        char ip[INET6_ADDRSTRLEN];
+                        
+                        const char *conversion = inet_ntop(AF_INET6, &nativeAddr6.sin6_addr, ip, sizeof(ip));
+                        
+                        if ((conversion != NULL) && (strcmp(ip, iface) == 0))
+                        {
+                            // IP match
+                            
+                            nativeAddr6.sin6_port = htons(port);
+                            
+                            addr6 = [NSMutableData dataWithBytes:&nativeAddr6 length:sizeof(nativeAddr6)];
+                        }
+                    }
+                }
+                
+                cursor = cursor->ifa_next;
+            }
+            
+            freeifaddrs(addrs);
+        }
+    }
+    
+    if (interfaceAddr4Ptr) *interfaceAddr4Ptr = addr4;
+    if (interfaceAddr6Ptr) *interfaceAddr6Ptr = addr6;
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+#pragma mark Class Utilities
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 + (NSMutableArray *)lookupHost:(NSString *)host port:(uint16_t)port error:(NSError **)errPtr
 {
@@ -784,6 +1452,14 @@ static struct timeval get_timeval(NSTimeInterval interval)
     tval.tv_usec = (int)(1e6 * (interval - tval.tv_sec));
     return tval;
 }
+
+#if 0
+static NSTimeInterval get_interval(struct timeval tv)
+{
+    NSTimeInterval interval = tv.tv_sec;
+    return interval + 1e-6 * tv.tv_usec;
+}
+#endif
 
 /**
  This method is adapted from section 16.3 in Unix Network Programming (2003) by Richard Stevens et al.

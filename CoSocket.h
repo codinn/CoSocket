@@ -1,6 +1,11 @@
 //
 //  CoSocket.h
 //  Copyright (c) 2011-2013 Daniel Reese <dan@danandcheryl.com>
+//  Copyright (c) 2014 Yang Yubo <yang@codinn.com>
+//
+//  Some part of code is copied from GCDAsyncSocket project,
+//  which created by Robbie Hanson in Q4 2010.
+//  Updated and maintained by Deusty LLC and the Apple development community.
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy
 //  of this software and associated documentation files (the "Software"), to deal
@@ -24,105 +29,176 @@
 #import <Foundation/Foundation.h>
 #include <sys/socket.h> // AF_INET, AF_INET6
 
-
-#define NEW_ERROR(num, str) [[NSError alloc] initWithDomain:@"CoSocketErrorDomain" code:(num) userInfo:[NSDictionary dictionaryWithObject:[NSString stringWithFormat:@"%s", (str)] forKey:NSLocalizedDescriptionKey]]
-
 @interface CoSocket : NSObject
 
-#pragma mark - Properties
+#pragma mark Configuration
 
 /**
- The file descriptor used to communicate to the remote machine.
- */
-@property (nonatomic, readonly) int sockfd;
+ * By default, both IPv4 and IPv6 are enabled.
+ *
+ * For accepting incoming connections, this means CoSocket automatically supports both protocols,
+ * and can simulataneously accept incoming connections on either protocol.
+ *
+ * For outgoing connections, this means CoSocket can connect to remote hosts running either protocol.
+ * If a DNS lookup returns only IPv4 results, CoSocket will automatically use IPv4.
+ * If a DNS lookup returns only IPv6 results, CoSocket will automatically use IPv6.
+ * If a DNS lookup returns both IPv4 and IPv6 results, the preferred protocol will be chosen.
+ * By default, the preferred protocol is IPv4, but may be configured as desired.
+ **/
+
+@property (atomic, assign, readwrite, getter=isIPv4Enabled) BOOL IPv4Enabled;
+@property (atomic, assign, readwrite, getter=isIPv6Enabled) BOOL IPv6Enabled;
+
+@property (atomic, assign, readwrite, getter=isIPv4PreferredOverIPv6) BOOL IPv4PreferredOverIPv6;
+
+#pragma mark Connecting
 
 /**
- The host name of the remote machine.
- */
-@property (nonatomic, readonly) NSString *host;
+ * Connects to the given host and port.
+ *
+ * This method invokes connectToHost:onPort:viaInterface:withTimeout:error:
+ * and uses the default interface, and no timeout.
+ **/
+- (BOOL)connectToHost:(NSString *)host onPort:(uint16_t)port error:(NSError **)errPtr;
 
 /**
- The port number of the remote machine.
- */
-@property (nonatomic, readonly) uint16_t port;
+ * Connects to the given host and port with an optional timeout.
+ *
+ * This method invokes connectToHost:onPort:viaInterface:withTimeout:error: and uses the default interface.
+ **/
+- (BOOL)connectToHost:(NSString *)host
+               onPort:(uint16_t)port
+          withTimeout:(NSTimeInterval)timeout
+                error:(NSError **)errPtr;
 
 /**
- The last error that occured. This value is not set to nil after a successful call, so it is not
- appropriate to test this value to check for error conditions. Check for a NO or nil return value.
- */
-@property (nonatomic, readonly) NSError *lastError;
-
-#pragma mark - Initializers
-
-/**
- Returns an initialized CoSocket object configured to connect to the given host name and port number.
- 
- @param host The host name of the remote host.
- @param port The port number on which to connect.
- @param timeout The maximum amount of time to wait for a connection to succeed.
- @return An initialized CoSocket object configured to connect to the given host name and port number.
- */
-- (instancetype)initWithHost:(NSString *)host onPort:(uint16_t)port timeout:(NSTimeInterval)timeout;
-- (instancetype)initWithHost:(NSString *)host onPort:(uint16_t)port;
-
-/**
- Returns an initialized CoSocket object configured to communicate throught the given file descriptor.
- This method is primary used by a server socket to receive an incoming connection.
- 
- @param fd The file descriptor to use for communication.
- @return An initialized CoSocket object configured to communicate throught the given file descriptor.
- */
-- (instancetype)initWithFileDescriptor:(int)fd timeout:(NSTimeInterval)timeout;
-- (instancetype)initWithFileDescriptor:(int)fd;
-
-/**
- Retrieves the internal buffer and its size for use outside the class. This buffer is good
- to use for sending and receiving bytes because it is a multiple of the segment size and
- allocated so that it is aligned on a memory page boundary.
- */
-- (void)buffer:(void **)buf size:(long *)size __attribute__((nonnull));
-
-#pragma mark - Actions
+ * Connects to the given host & port, via the optional interface, with an optional timeout.
+ *
+ * The host may be a domain name (e.g. "deusty.com") or an IP address string (e.g. "192.168.0.2").
+ * The host may also be the special strings "localhost" or "loopback" to specify connecting
+ * to a service on the local machine.
+ *
+ * The interface may be a name (e.g. "en1" or "lo0") or the corresponding IP address (e.g. "192.168.4.35").
+ * The interface may also be used to specify the local port (see below).
+ *
+ * To not time out use a negative time interval.
+ *
+ * This method will return NO if an error is detected, and set the error pointer (if one was given).
+ * Possible errors would be a nil host, invalid interface, or socket is already connected.
+ *
+ * The interface may optionally contain a port number at the end of the string, separated by a colon.
+ * This allows you to specify the local port that should be used for the outgoing connection. (read paragraph to end)
+ * To specify both interface and local port: "en1:8082" or "192.168.4.35:2424".
+ * To specify only local port: ":8082".
+ * Please note this is an advanced feature, and is somewhat hidden on purpose.
+ * You should understand that 99.999% of the time you should NOT specify the local port for an outgoing connection.
+ * If you think you need to, there is a very good chance you have a fundamental misunderstanding somewhere.
+ * Local ports do NOT need to match remote ports. In fact, they almost never do.
+ * This feature is here for networking professionals using very advanced techniques.
+ **/
+- (BOOL)connectToHost:(NSString *)host
+               onPort:(uint16_t)port
+         viaInterface:(NSString *)interface
+          withTimeout:(NSTimeInterval)timeout
+                error:(NSError **)errPtr;
 
 /**
- Connect the socket to the remote host.
- 
- @return YES if the connection succeeded, NO otherwise.
- */
-- (BOOL)connect;
+ * Connects to the given address, specified as a sockaddr structure wrapped in a NSData object.
+ * For example, a NSData object returned from NSNetService's addresses method.
+ *
+ * If you have an existing struct sockaddr you can convert it to a NSData object like so:
+ * struct sockaddr sa  -> NSData *dsa = [NSData dataWithBytes:&remoteAddr length:remoteAddr.sa_len];
+ * struct sockaddr *sa -> NSData *dsa = [NSData dataWithBytes:remoteAddr length:remoteAddr->sa_len];
+ *
+ * This method invokes connectToAdd
+ **/
+- (BOOL)connectToAddress:(NSData *)remoteAddr error:(NSError **)errPtr;
 
 /**
- Returns whether the socket is currently connected.
- 
- @return YES if the socket is connected, NO otherwise.
- */
-- (BOOL)isConnected;
+ * This method is the same as connectToAddress:error: with an additional timeout option.
+ * To not time out use a negative time interval, or simply use the connectToAddress:error: method.
+ **/
+- (BOOL)connectToAddress:(NSData *)remoteAddr withTimeout:(NSTimeInterval)timeout error:(NSError **)errPtr;
 
 /**
- Closes the connection to the remote host.
- 
- @return YES if the close succeeded, NO otherwise.
- */
-- (BOOL)close;
+ * Connects to the given address, using the specified interface and timeout.
+ *
+ * The address is specified as a sockaddr structure wrapped in a NSData object.
+ * For example, a NSData object returned from NSNetService's addresses method.
+ *
+ * If you have an existing struct sockaddr you can convert it to a NSData object like so:
+ * struct sockaddr sa  -> NSData *dsa = [NSData dataWithBytes:&remoteAddr length:remoteAddr.sa_len];
+ * struct sockaddr *sa -> NSData *dsa = [NSData dataWithBytes:remoteAddr length:remoteAddr->sa_len];
+ *
+ * The interface may be a name (e.g. "en1" or "lo0") or the corresponding IP address (e.g. "192.168.4.35").
+ * The interface may also be used to specify the local port (see below).
+ *
+ * The timeout is optional. To not time out use a negative time interval.
+ *
+ * This method will return NO if an error is detected, and set the error pointer (if one was given).
+ * Possible errors would be a nil host, invalid interface, or socket is already connected.
+ *
+ * The interface may optionally contain a port number at the end of the string, separated by a colon.
+ * This allows you to specify the local port that should be used for the outgoing connection. (read paragraph to end)
+ * To specify both interface and local port: "en1:8082" or "192.168.4.35:2424".
+ * To specify only local port: ":8082".
+ * Please note this is an advanced feature, and is somewhat hidden on purpose.
+ * You should understand that 99.999% of the time you should NOT specify the local port for an outgoing connection.
+ * If you think you need to, there is a very good chance you have a fundamental misunderstanding somewhere.
+ * Local ports do NOT need to match remote ports. In fact, they almost never do.
+ * This feature is here for networking professionals using very advanced techniques.
+ **/
+- (BOOL)connectToAddress:(NSData *)remoteAddr
+            viaInterface:(NSString *)interface
+             withTimeout:(NSTimeInterval)timeout
+                   error:(NSError **)errPtr;
+
+
+#pragma mark Disconnecting
 
 /**
- Shutdown the connection to the remote host.
- 
- Close vs shutdown socket:
- 
- shutdown is a flexible way to block communication in one or both directions. When the second parameter is SHUT_RDWR, it will block both sending and receiving (like close). However, close is the way to actually destroy a socket.
- 
- With shutdown, you will still be able to receive pending data the peer already sent (thanks to Joey Adams for noting this).
- 
- Big difference between shutdown and close on a socket is the behavior when the socket is shared by other processes. A shutdown() affects all copies of the socket while close() affects only the file descriptor in one process.
- 
- Someone also had success under linux using shutdown() from one pthread to force another pthread currently blocked in connect() to abort early.
- 
- Under other OSes (OSX at least), I found calling close() was enough to get connect() fail.
- 
- @return YES if the close succeeded, NO otherwise.
- */
-- (BOOL)shutdown;
+ * Disconnects immediately (synchronously). Any pending reads or writes are dropped.
+ *
+ **/
+- (void)disconnect;
+
+#pragma mark Diagnostics
+
+/**
+ * Returns whether the socket is  connected.
+ **/
+@property (atomic, readonly) BOOL isConnected;
+
+/**
+ * Returns the local or remote host and port to which this socket is connected, or nil and 0 if not connected.
+ * The host will be an IP address.
+ **/
+@property (atomic, readonly) NSString *connectedHost;
+@property (atomic, readonly) uint16_t  connectedPort;
+
+@property (atomic, readonly) NSString *localHost;
+@property (atomic, readonly) uint16_t  localPort;
+
+/**
+ * Returns the local or remote address to which this socket is connected,
+ * specified as a sockaddr structure wrapped in a NSData object.
+ *
+ * @seealso connectedHost
+ * @seealso connectedPort
+ * @seealso localHost
+ * @seealso localPort
+ **/
+@property (atomic, readonly) NSData *connectedAddress;
+@property (atomic, readonly) NSData *localAddress;
+
+/**
+ * Returns whether the socket is IPv4 or IPv6.
+ * An accepting socket may be both.
+ **/
+@property (atomic, readonly) BOOL isIPv4;
+@property (atomic, readonly) BOOL isIPv6;
+
+#pragma mark Writing
 
 /**
  Sends the specified number bytes from the given data.
@@ -130,7 +206,10 @@
  @param data   The data containing the bytes to send.
  @return The actual number of bytes sent.
  */
-- (BOOL)writeData:(NSData *)data;
+- (BOOL)writeData:(NSData *)data error:(NSError **)errPtr;
+
+
+#pragma mark Reading
 
 /**
  Receives the exact number of bytes specified unless a timeout or other error occurs.
@@ -141,7 +220,7 @@
  @param count The exact number of bytes to receive, typically the size of the buffer.
  @return YES if the correct number of bytes was received, NO otherwise.
  */
-- (NSData *)readDataToLength:(NSUInteger)length;
+- (NSData *)readDataToLength:(NSUInteger)length error:(NSError **)errPtr;
 
 /**
  * Reads bytes until (and including) the passed "data" parameter, which acts as a separator.
@@ -162,62 +241,23 @@
  * For performance reasons, the socket will retain it, not copy it.
  * So if it is immutable, don't modify it while the socket is using it.
  **/
-- (NSData *)readDataToData:(NSData *)data;
+- (NSData *)readDataToData:(NSData *)data error:(NSError **)errPtr;
 
-#pragma mark - Settings
-
-/**
- Returns the number of seconds to wait without any network activity before giving up and
- returning an error. The default is zero seconds, in which case it will never time out.
- 
- @return The current timeout value in seconds.
- */
-- (NSTimeInterval)timeout;
+#pragma mark Advanced
 
 /**
- Sets the number of seconds to wait without any network activity before giving up and
- returning an error. The default is zero seconds, in which case it will never time out.
- 
- @param seconds The number of seconds to wait before timing out.
- @return YES if the timeout value was set successfully, NO otherwise.
- */
-- (BOOL)setTimeout:(NSTimeInterval)seconds;
-
-/**
- Returns the maximum segment size. The segment size is the largest amount of
- data that can be transmitted within a single packet. Too large of a value may result in packets
- being broken apart and reassembled during transmission, which is normal but can slow things
- down. Too small of a value may result in lots of overhead, which can also slow things down.
- 
- A default value is automatically negotiated when a connection is established. However, the
- negotiation process may incorporate assumptions that are incorrect. If you understand the
- network condidtions, setting this value correctly may increase performance.
- 
- @return The current maximum segment value, measured in bytes.
- */
-- (int)segmentSize;
-
-/**
- Sets the maximum segment size. The segment size is the largest amount of
- data that can be transmitted within a single packet, excluding headers. Too large of a value
- may result in packets being broken apart and reassembled during transmission, which is normal
- but can slow things down. Too small of a value may result in lots of overhead, which can
- also slow things down.
- 
- A default value is automatically negotiated when a connection is established. However, the
- negotiation process may incorporate assumptions that are incorrect. If you understand the
- network condidtions, setting this value correctly may increase performance.
- 
- @param bytes The maximum segment size, measured in bytes.
- @return YES if the segment size value was set successfully, NO otherwise.
- */
-- (BOOL)setSegmentSize:(int)bytes;
+* Provides access to the socket's file descriptor(s).
+* If the socket is a server socket (is accepting incoming connections),
+* it might actually have multiple internal socket file descriptors - one for IPv4 and one for IPv6.
+**/
+@property (nonatomic, readonly) int socketFD;
+@property (nonatomic, readonly) int socket4FD;
+@property (nonatomic, readonly) int socket6FD;
 
 #pragma mark Utilities
 
 /**
  * The address lookup utility used by the class.
- * This method is synchronous, so it's recommended you use it on a background thread/queue.
  *
  * The special strings "localhost" and "loopback" return the loopback address for IPv4 and IPv6.
  *
