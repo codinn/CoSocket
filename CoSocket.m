@@ -54,19 +54,15 @@
 #import <net/if.h>
 #import <netinet/tcp.h>
 #import <netinet/in.h>
-#import <unistd.h>
 #import <arpa/inet.h>
 #import <fcntl.h>
 #import <ifaddrs.h>
 #import <sys/socket.h>
 #import <sys/types.h>
 #import <sys/ioctl.h>
-#import <sys/poll.h>
-#import <sys/uio.h>
-#import <unistd.h>
 
 #define CoSocketErrorDomain @"CoSocketErrorDomain"
-#define CoTCPSocketBufferSize 65536
+#define CoTCPSocketBufferSize 65536 // 64K
 #define SOCKET_NULL -1
 
 static struct timeval get_timeval(NSTimeInterval interval);
@@ -93,13 +89,12 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
 
 @implementation CoSocket
 
-
 - (instancetype)init
 {
 	if ((self = [super init])) {
 		_socketFD = SOCKET_NULL;
-		_size = getpagesize() * 1448 / 4;
-		_buffer = valloc(_size);
+		_size = CoTCPSocketBufferSize;
+		_buffer = malloc(_size);
         _timeout = 0;
         
         self.IPv4Enabled = YES;
@@ -279,18 +274,6 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
         if (errPtr) *errPtr = [self errnoError];
         [self disconnect];
         return NO;
-    }
-    
-    // Disable Nagle's algorithm.
-    if (setsockopt(_socketFD, IPPROTO_TCP, TCP_NODELAY, &(int){1}, sizeof(int)) < 0) {
-        if (errPtr) *errPtr = [self errnoError];
-        [self disconnect];
-        return NO;
-    }
-    
-    // Increase receive buffer size.
-    if (setsockopt(_socketFD, SOL_SOCKET, SO_RCVBUF, &_size, sizeof(_size)) < 0) {
-        // Ignore this because some systems have small hard limits.
     }
     
     // Get current flags to restore after.
