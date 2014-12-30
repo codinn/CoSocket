@@ -247,12 +247,8 @@
 
 /**
 * Provides access to the socket's file descriptor(s).
-* If the socket is a server socket (is accepting incoming connections),
-* it might actually have multiple internal socket file descriptors - one for IPv4 and one for IPv6.
 **/
 @property (nonatomic, readonly) int socketFD;
-@property (nonatomic, readonly) int socket4FD;
-@property (nonatomic, readonly) int socket6FD;
 
 #pragma mark Utilities
 
