@@ -220,11 +220,9 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
     
     if (useIPv4) {
         _socketFD = socket(AF_INET, SOCK_STREAM, 0);
-        
         address = address4;
     } else {
         _socketFD = socket(AF_INET6, SOCK_STREAM, 0);
-        
         address = address6;
     }
     
@@ -272,7 +270,7 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
     struct timeval timeout = get_timeval(_timeout);
     
     // Connect the socket using the given timeout.
-    if (connect_timeout(_socketFD, (const struct sockaddr *)[address bytes], (socklen_t)[address length], timeout) < 0) {
+    if (connect_timeout(_socketFD, (const struct sockaddr *)address.bytes, (socklen_t)address.length, timeout) < 0) {
         if (errPtr) *errPtr = [self errnoError];
         [self disconnect];
         return NO;
@@ -707,82 +705,22 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
 
 - (NSString *)connectedHost
 {
-    if (_socketFD != SOCKET_NULL)
-        return [self connectedHostFromSocket:_socketFD];
-    
-    return nil;
+    return [self.class hostFromAddress:[self connectedAddress]];
 }
 
 - (uint16_t)connectedPort
 {
-    if (_socketFD != SOCKET_NULL)
-        return [self connectedPortFromSocket:_socketFD];
-    
-    return 0;
+    return [self.class portFromAddress:[self connectedAddress]];
 }
 
 - (NSString *)localHost
 {
-    if (_socketFD != SOCKET_NULL)
-        return [self localHostFromSocket:_socketFD];
-    
-    return nil;
+    return [self.class hostFromAddress:[self localAddress]];
 }
 
 - (uint16_t)localPort
 {
-    if (_socketFD != SOCKET_NULL)
-        return [self localPortFromSocket:_socketFD];
-    
-    return 0;
-}
-
-- (NSString *)connectedHostFromSocket:(int)socketFD
-{
-    struct sockaddr sockaddrX;
-    socklen_t sockaddrXlen = sizeof(sockaddrX);
-    
-    if (getpeername(socketFD, (struct sockaddr *)&sockaddrX, &sockaddrXlen) < 0) {
-        return nil;
-    }
-    
-    return [[self class] hostFromSockaddr:&sockaddrX];
-}
-
-- (uint16_t)connectedPortFromSocket:(int)socketFD
-{
-    struct sockaddr sockaddrX;
-    socklen_t sockaddrXlen = sizeof(sockaddrX);
-    
-    if (getpeername(socketFD, (struct sockaddr *)&sockaddrX, &sockaddrXlen) < 0) {
-        return 0;
-    }
-    
-    return [[self class] portFromSockaddr:&sockaddrX];
-}
-
-- (NSString *)localHostFromSocket:(int)socketFD
-{
-    struct sockaddr sockaddrX;
-    socklen_t sockaddrXlen = sizeof(sockaddrX);
-    
-    if (getsockname(socketFD, (struct sockaddr *)&sockaddrX, &sockaddrXlen) < 0) {
-        return nil;
-    }
-    
-    return [[self class] hostFromSockaddr:&sockaddrX];
-}
-
-- (uint16_t)localPortFromSocket:(int)socketFD
-{
-    struct sockaddr sockaddrX;
-    socklen_t sockaddrXlen = sizeof(sockaddrX);
-    
-    if (getsockname(socketFD, (struct sockaddr *)&sockaddrX, &sockaddrXlen) < 0) {
-        return 0;
-    }
-    
-    return [[self class] portFromSockaddr:&sockaddrX];
+    return [self.class portFromAddress:[self localAddress]];
 }
 
 - (NSData *)connectedAddress
@@ -790,7 +728,7 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
     NSData *result = nil;
     
     if (_socketFD != SOCKET_NULL) {
-        struct sockaddr sock_addr;
+        struct sockaddr_storage sock_addr;
         socklen_t sock_addr_len = sizeof(sock_addr);
         
         if (getpeername(_socketFD, (struct sockaddr *)&sock_addr, &sock_addr_len) == 0) {
@@ -806,7 +744,7 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
     NSData *result = nil;
     
     if (_socketFD != SOCKET_NULL) {
-        struct sockaddr sock_addr;
+        struct sockaddr_storage sock_addr;
         socklen_t sock_addr_len = sizeof(sock_addr);
         
         if (getsockname(_socketFD, (struct sockaddr *)&sock_addr, &sock_addr_len) == 0) {
@@ -1083,7 +1021,7 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
     
     if (pSockaddr->sa_family == AF_INET6) {
         const struct sockaddr_in6 *pSockaddr6 = (const struct sockaddr_in6 *)pSockaddr;
-        char addrBuf[INET6_ADDRSTRLEN];
+        char addrBuf[INET6_ADDRSTRLEN] = {0};
         
         if (inet_ntop(AF_INET6, &pSockaddr6->sin6_addr, addrBuf, (socklen_t)sizeof(addrBuf)) == NULL) {
             addrBuf[0] = '\0';
