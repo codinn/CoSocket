@@ -196,7 +196,7 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
         }
         
         // Determine socket type
-        BOOL useIPv4 = ((self.isIPv4PreferredOverIPv6 && interface4) || (interface6 == nil));
+        BOOL useIPv4 = (self.isIPv4Enabled && ( (self.isIPv4PreferredOverIPv6 && interface4) || (interface6 == nil) ) );
         
         if (useIPv4) {
             _connectInterface = interface4;
@@ -212,7 +212,7 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
 - (BOOL)connectWithAddress4:(NSData *)address4 address6:(NSData *)address6 error:(NSError **)errPtr
 {
     // Determine socket type
-    BOOL useIPv4 = ((self.isIPv4PreferredOverIPv6 && address4) || (address6 == nil));
+    BOOL useIPv4 = (self.isIPv4Enabled && ( (self.isIPv4PreferredOverIPv6 && address4) || (address6 == nil) ) );
     
     // Create the socket
     
