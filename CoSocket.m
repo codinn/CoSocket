@@ -347,14 +347,14 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
         // Check for problems
         
         if (!self.isIPv4Enabled && (address6 == nil)) {
-            NSString *msg = @"IPv4 has been disabled and DNS lookup found no IPv6 address.";
+            NSString *msg = @"IPv4 has been disabled and DNS lookup found no IPv6 address";
             if (errPtr) *errPtr = [self otherError:msg];
             [self disconnect];
             return NO;
         }
         
         if (!self.isIPv6Enabled && (address4 == nil)) {
-            NSString *msg = @"IPv6 has been disabled and DNS lookup found no IPv4 address.";
+            NSString *msg = @"IPv6 has been disabled and DNS lookup found no IPv4 address";
             
             if (errPtr) *errPtr = [self otherError:msg];
             [self disconnect];
@@ -419,13 +419,13 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
     }
     
     if (!self.isIPv4Enabled && (address4 != nil)) {
-        if (errPtr) *errPtr = [self otherError:@"IPv4 has been disabled and an IPv4 address was passed."];
+        if (errPtr) *errPtr = [self otherError:@"IPv4 has been disabled and an IPv4 address was passed"];
         
         return NO;
     }
     
     if (!self.isIPv6Enabled && (address6 != nil)) {
-        if (errPtr) *errPtr = [self otherError:@"IPv6 has been disabled and an IPv6 address was passed."];
+        if (errPtr) *errPtr = [self otherError:@"IPv6 has been disabled and an IPv6 address was passed"];
         
         return NO;
     }
