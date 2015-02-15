@@ -29,6 +29,8 @@
 #import <Foundation/Foundation.h>
 #include <sys/socket.h> // AF_INET, AF_INET6
 
+typedef void (^ CoSocketLogHandler)(NSString *fmt, ...);
+
 @interface CoSocket : NSObject
 
 #pragma mark Configuration
@@ -197,6 +199,8 @@
  **/
 @property (atomic, readonly) BOOL isIPv4;
 @property (atomic, readonly) BOOL isIPv6;
+
+@property (strong, readwrite) CoSocketLogHandler logHandler;
 
 #pragma mark Writing
 
