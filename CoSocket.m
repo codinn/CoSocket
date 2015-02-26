@@ -267,11 +267,8 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
     
     if (self.logHandler) self.logHandler(@"SOCKET DEBUG: set SO_NOSIGPIPE");
     
-    // Get current flags to restore after.
-    int flags = fcntl(_socketFD, F_GETFL, 0);
-    
     // Set socket to non-blocking.
-    fcntl(_socketFD, F_SETFL, flags | O_NONBLOCK);
+    fcntl(_socketFD, F_SETFL, O_NONBLOCK);
     
     if (self.logHandler) self.logHandler(@"SOCKET DEBUG: set O_NONBLOCK");
     
