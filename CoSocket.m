@@ -104,7 +104,8 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
 }
 
 - (void)dealloc {
-	[self disconnect];
+    [self disconnect];
+    _socketFD = SOCKET_NULL;
 	free(_buffer);
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -477,7 +478,6 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
     if (_socketFD != SOCKET_NULL) {
         shutdown(_socketFD, SHUT_RDWR);
         close(_socketFD);
-        _socketFD = SOCKET_NULL;
     }
 }
 
