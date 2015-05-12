@@ -200,7 +200,7 @@ typedef void (^ CoSocketLogHandler)(NSString *fmt, ...);
 @property (atomic, readonly) BOOL isIPv4;
 @property (atomic, readonly) BOOL isIPv6;
 
-@property (strong, readwrite) CoSocketLogHandler logHandler;
+@property (strong, readwrite) CoSocketLogHandler logDebug;
 
 #pragma mark Writing
 

@@ -222,11 +222,11 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
     if (useIPv4) {
         _socketFD = socket(AF_INET, SOCK_STREAM, 0);
         address = address4;
-        if (self.logHandler) self.logHandler(@"SOCKET DEBUG: use IPv4 address");
+        if (_logDebug) _logDebug(@"Create socket with IPv4 address family");
     } else {
         _socketFD = socket(AF_INET6, SOCK_STREAM, 0);
         address = address6;
-        if (self.logHandler) self.logHandler(@"SOCKET DEBUG: use IPv6 address");
+        if (_logDebug) _logDebug(@"Create socket with IPv6 address family");
     }
     
     if (_socketFD == SOCKET_NULL) {
@@ -256,7 +256,7 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
             return NO;
         }
         
-        if (self.logHandler) self.logHandler(@"SOCKET DEBUG: bound to specified interface");
+        if (_logDebug) _logDebug(@"Bound to specified interface");
     }
     
     // Instead of receiving a SIGPIPE signal, have write() return an error.
@@ -266,17 +266,13 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
         return NO;
     }
     
-    if (self.logHandler) self.logHandler(@"SOCKET DEBUG: set SO_NOSIGPIPE");
-    
     // Set socket to non-blocking.
     fcntl(_socketFD, F_SETFL, O_NONBLOCK);
-    
-    if (self.logHandler) self.logHandler(@"SOCKET DEBUG: set O_NONBLOCK");
     
     struct timeval timeout = get_timeval(_timeout);
     
     // Connect the socket using the given timeout.
-    if (connect_timeout(_socketFD, (const struct sockaddr *)address.bytes, (socklen_t)address.length, timeout, self.logHandler) < 0) {
+    if (connect_timeout(_socketFD, (const struct sockaddr *)address.bytes, (socklen_t)address.length, timeout, _logDebug) < 0) {
         if (errPtr) *errPtr = [self errnoError];
         [self disconnect];
         return NO;
@@ -304,7 +300,7 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
           withTimeout:(NSTimeInterval)timeout
                 error:(NSError **)errPtr
 {
-    if (self.logHandler) self.logHandler(@"SOCKET DEBUG: Connect to %@:%d, with timeout %f", inHost, port, timeout);
+    if (_logDebug) _logDebug(@"Connect to %@:%d, with timeout %f", inHost, port, timeout);
     
     _timeout = timeout;
     
@@ -326,8 +322,6 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
         return NO;
     }
     
-    if (self.logHandler) self.logHandler(@"SOCKET DEBUG: Preconnected with interface %@", inInterface);
-    
     // We've made it past all the checks.
     // It's time to start the connection process.
     
@@ -348,10 +342,8 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
         
         for (NSData *address in addresses) {
             if (!address4 && [self.class isIPv4Address:address]) {
-                if (self.logHandler) self.logHandler(@"SOCKET DEBUG: IPv4 address found");
                 address4 = address;
             } else if (!address6 && [self.class isIPv6Address:address]) {
-                if (self.logHandler) self.logHandler(@"SOCKET DEBUG: IPv6 address found");
                 address6 = address;
             }
         }
@@ -1168,22 +1160,19 @@ static NSTimeInterval get_interval(struct timeval tv)
  */
 static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t address_len, struct timeval timeout, CoSocketLogHandler logHandler)
 {
-    if (logHandler) logHandler(@"SOCKET DEBUG: connect with timeout");
-    
 	int error = 0;
 	
 	// Connect should return immediately in the "in progress" state.
 	int result = 0;
 	if ((result = connect(sockfd, address, address_len)) < 0) {
         if (errno != EINPROGRESS) {
-            if (logHandler) logHandler(@"SOCKET DEBUG: connect !EINPROGRESS");
 			return -1;
 		}
 	}
 	
 	// If connection completed immediately, skip waiting.
     if (result == 0) {
-        if (logHandler) logHandler(@"SOCKET DEBUG: connect skip waiting");
+        if (logHandler) logHandler(@"Connection completed immediately, skip waiting");
 		goto done;
 	}
 	
@@ -1197,7 +1186,7 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
     result = select(sockfd + 1, &rset, &wset, NULL, &timeout);
     
     if (result==-1) {
-        if (logHandler) logHandler(@"SOCKET DEBUG: select failed");
+        if (logHandler) logHandler(@"Socket select() failed");
         close(sockfd);
         return -1;
     }
@@ -1205,7 +1194,7 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
 	if (result == 0) {
 		close(sockfd);
         errno = ETIMEDOUT;
-        if (logHandler) logHandler(@"SOCKET DEBUG: connect ETIMEDOUT");
+        if (logHandler) logHandler(@"Socket connect timed out");
 		return -1;
 	}
 	
@@ -1213,7 +1202,7 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
 	if (FD_ISSET(sockfd, &rset) || FD_ISSET(sockfd, &wset)) {
 		socklen_t len = sizeof(error);
         if (getsockopt(sockfd, SOL_SOCKET, SO_ERROR, &error, &len) != 0) {
-            if (logHandler) logHandler(@"SOCKET DEBUG: connect SO_ERROR");
+            if (logHandler) logHandler(@"Failed to set socket option SO_ERROR");
 			return -1;
 		}
 	}
@@ -1221,12 +1210,11 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
 done:
 	// NOTE: On some systems, getsockopt() will fail and set errno. On others, it will succeed and set the error parameter.
     if (error) {
-        if (logHandler) logHandler(@"SOCKET DEBUG: connect getsockopt fail");
 		close(sockfd);
 		errno = error;
 		return -1;
     }
     
-    if (logHandler) logHandler(@"SOCKET DEBUG: connect success");
+    if (logHandler) logHandler(@"Socket is connected successfully");
 	return 0;
 }
