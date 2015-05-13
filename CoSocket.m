@@ -71,7 +71,7 @@ static struct timeval get_timeval(NSTimeInterval interval);
 static NSTimeInterval get_interval(struct timeval tv);
 #endif
 
-static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t address_len, struct timeval timeout, CoSocketLogHandler logHandler);
+static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t address_len, struct timeval timeout, CoSocketLogHandler logDebug);
 
 
 @interface CoSocket () {
@@ -1158,7 +1158,7 @@ static NSTimeInterval get_interval(struct timeval tv)
  This method is adapted from section 16.3 in Unix Network Programming (2003) by Richard Stevens et al.
  See http://books.google.com/books?id=ptSC4LpwGA0C&lpg=PP1&pg=PA448
  */
-static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t address_len, struct timeval timeout, CoSocketLogHandler logHandler)
+static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t address_len, struct timeval timeout, CoSocketLogHandler logDebug)
 {
 	int error = 0;
 	
@@ -1172,7 +1172,7 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
 	
 	// If connection completed immediately, skip waiting.
     if (result == 0) {
-        if (logHandler) logHandler(@"Connection completed immediately, skip waiting");
+        if (logDebug) logDebug(@"Connection completed immediately, skip waiting");
 		goto done;
 	}
 	
@@ -1186,7 +1186,7 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
     result = select(sockfd + 1, &rset, &wset, NULL, &timeout);
     
     if (result==-1) {
-        if (logHandler) logHandler(@"Socket select() failed");
+        if (logDebug) logDebug(@"Socket select() failed");
         close(sockfd);
         return -1;
     }
@@ -1194,7 +1194,7 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
 	if (result == 0) {
 		close(sockfd);
         errno = ETIMEDOUT;
-        if (logHandler) logHandler(@"Socket connect timed out");
+        if (logDebug) logDebug(@"Socket connect timed out");
 		return -1;
 	}
 	
@@ -1202,7 +1202,7 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
 	if (FD_ISSET(sockfd, &rset) || FD_ISSET(sockfd, &wset)) {
 		socklen_t len = sizeof(error);
         if (getsockopt(sockfd, SOL_SOCKET, SO_ERROR, &error, &len) != 0) {
-            if (logHandler) logHandler(@"Failed to set socket option SO_ERROR");
+            if (logDebug) logDebug(@"Failed to set socket option SO_ERROR");
 			return -1;
 		}
 	}
@@ -1215,6 +1215,6 @@ done:
 		return -1;
     }
     
-    if (logHandler) logHandler(@"Socket is connected successfully");
+    if (logDebug) logDebug(@"Socket is connected successfully");
 	return 0;
 }
