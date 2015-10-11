@@ -259,6 +259,13 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
         if (_logDebug) _logDebug(@"Bound to specified interface");
     }
     
+    // Numerous Small Packet Exchanges Result In Poor TCP Performance
+    // Make interactive shell, rdp etc, more responsive by disable the Nagle algorithm
+    // More info: xcdoc://?url=developer.apple.com/library/etc/redirect/xcode/mac/34580/qa/nw26/_index.html
+    if (setsockopt(_socketFD, IPPROTO_TCP, TCP_NODELAY, &(int){1}, sizeof(int))==-1) {
+        if (_logDebug) _logDebug(@"Failed to set TCP_NODELAY");
+    }
+    
     // Instead of receiving a SIGPIPE signal, have write() return an error.
     if (setsockopt(_socketFD, SOL_SOCKET, SO_NOSIGPIPE, &(int){1}, sizeof(int)) != 0) {
         if (errPtr) *errPtr = [self errnoError];
