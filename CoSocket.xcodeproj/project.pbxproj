@@ -1,0 +1,381 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 46;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		4AA509691CBCDB5D008CD7F3 /* CoSocket.h in Headers */ = {isa = PBXBuildFile; fileRef = 4AA509681CBCDB5D008CD7F3 /* CoSocket.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		4AA5096B1CBCDB5D008CD7F3 /* CoSocket.m in Sources */ = {isa = PBXBuildFile; fileRef = 4AA5096A1CBCDB5D008CD7F3 /* CoSocket.m */; };
+		4AA5097A1CBCDBBC008CD7F3 /* libCoSocket.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 4AA509651CBCDB5D008CD7F3 /* libCoSocket.a */; };
+		4AA509821CBCE2E7008CD7F3 /* SocketTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AA509811CBCE2E7008CD7F3 /* SocketTests.swift */; };
+		4AA509851CBCE3D5008CD7F3 /* echo_server.py in Resources */ = {isa = PBXBuildFile; fileRef = 4AA509841CBCE3D5008CD7F3 /* echo_server.py */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		4AA5097B1CBCDBBC008CD7F3 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 4AA5095D1CBCDB5D008CD7F3 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 4AA509641CBCDB5D008CD7F3;
+			remoteInfo = CoSocket;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		4AA509651CBCDB5D008CD7F3 /* libCoSocket.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libCoSocket.a; sourceTree = BUILT_PRODUCTS_DIR; };
+		4AA509681CBCDB5D008CD7F3 /* CoSocket.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CoSocket.h; sourceTree = "<group>"; };
+		4AA5096A1CBCDB5D008CD7F3 /* CoSocket.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = CoSocket.m; sourceTree = "<group>"; };
+		4AA509751CBCDBBC008CD7F3 /* CoSocketTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CoSocketTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		4AA509791CBCDBBC008CD7F3 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		4AA509801CBCE2E6008CD7F3 /* Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Bridging-Header.h"; sourceTree = "<group>"; };
+		4AA509811CBCE2E7008CD7F3 /* SocketTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SocketTests.swift; sourceTree = "<group>"; };
+		4AA509841CBCE3D5008CD7F3 /* echo_server.py */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.python; path = echo_server.py; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		4AA509621CBCDB5D008CD7F3 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4AA509721CBCDBBC008CD7F3 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4AA5097A1CBCDBBC008CD7F3 /* libCoSocket.a in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		4AA5095C1CBCDB5D008CD7F3 = {
+			isa = PBXGroup;
+			children = (
+				4AA509671CBCDB5D008CD7F3 /* CoSocket */,
+				4AA509761CBCDBBC008CD7F3 /* CoSocketTests */,
+				4AA509661CBCDB5D008CD7F3 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		4AA509661CBCDB5D008CD7F3 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				4AA509651CBCDB5D008CD7F3 /* libCoSocket.a */,
+				4AA509751CBCDBBC008CD7F3 /* CoSocketTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		4AA509671CBCDB5D008CD7F3 /* CoSocket */ = {
+			isa = PBXGroup;
+			children = (
+				4AA509681CBCDB5D008CD7F3 /* CoSocket.h */,
+				4AA5096A1CBCDB5D008CD7F3 /* CoSocket.m */,
+			);
+			path = CoSocket;
+			sourceTree = "<group>";
+		};
+		4AA509761CBCDBBC008CD7F3 /* CoSocketTests */ = {
+			isa = PBXGroup;
+			children = (
+				4AA509831CBCE3C5008CD7F3 /* Others */,
+				4AA509811CBCE2E7008CD7F3 /* SocketTests.swift */,
+				4AA509801CBCE2E6008CD7F3 /* Bridging-Header.h */,
+			);
+			path = CoSocketTests;
+			sourceTree = "<group>";
+		};
+		4AA509831CBCE3C5008CD7F3 /* Others */ = {
+			isa = PBXGroup;
+			children = (
+				4AA509841CBCE3D5008CD7F3 /* echo_server.py */,
+				4AA509791CBCDBBC008CD7F3 /* Info.plist */,
+			);
+			name = Others;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXHeadersBuildPhase section */
+		4AA509631CBCDB5D008CD7F3 /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4AA509691CBCDB5D008CD7F3 /* CoSocket.h in Headers */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXHeadersBuildPhase section */
+
+/* Begin PBXNativeTarget section */
+		4AA509641CBCDB5D008CD7F3 /* CoSocket */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4AA5096E1CBCDB5D008CD7F3 /* Build configuration list for PBXNativeTarget "CoSocket" */;
+			buildPhases = (
+				4AA509611CBCDB5D008CD7F3 /* Sources */,
+				4AA509621CBCDB5D008CD7F3 /* Frameworks */,
+				4AA509631CBCDB5D008CD7F3 /* Headers */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = CoSocket;
+			productName = CoSocket;
+			productReference = 4AA509651CBCDB5D008CD7F3 /* libCoSocket.a */;
+			productType = "com.apple.product-type.library.static";
+		};
+		4AA509741CBCDBBC008CD7F3 /* CoSocketTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4AA5097D1CBCDBBC008CD7F3 /* Build configuration list for PBXNativeTarget "CoSocketTests" */;
+			buildPhases = (
+				4AA509711CBCDBBC008CD7F3 /* Sources */,
+				4AA509721CBCDBBC008CD7F3 /* Frameworks */,
+				4AA509731CBCDBBC008CD7F3 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				4AA5097C1CBCDBBC008CD7F3 /* PBXTargetDependency */,
+			);
+			name = CoSocketTests;
+			productName = CoSocketTests;
+			productReference = 4AA509751CBCDBBC008CD7F3 /* CoSocketTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		4AA5095D1CBCDB5D008CD7F3 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 0730;
+				ORGANIZATIONNAME = Codinn;
+				TargetAttributes = {
+					4AA509641CBCDB5D008CD7F3 = {
+						CreatedOnToolsVersion = 7.3;
+					};
+					4AA509741CBCDBBC008CD7F3 = {
+						CreatedOnToolsVersion = 7.3;
+					};
+				};
+			};
+			buildConfigurationList = 4AA509601CBCDB5D008CD7F3 /* Build configuration list for PBXProject "CoSocket" */;
+			compatibilityVersion = "Xcode 3.2";
+			developmentRegion = English;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+			);
+			mainGroup = 4AA5095C1CBCDB5D008CD7F3;
+			productRefGroup = 4AA509661CBCDB5D008CD7F3 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				4AA509641CBCDB5D008CD7F3 /* CoSocket */,
+				4AA509741CBCDBBC008CD7F3 /* CoSocketTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		4AA509731CBCDBBC008CD7F3 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4AA509851CBCE3D5008CD7F3 /* echo_server.py in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		4AA509611CBCDB5D008CD7F3 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4AA5096B1CBCDB5D008CD7F3 /* CoSocket.m in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4AA509711CBCDBBC008CD7F3 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4AA509821CBCE2E7008CD7F3 /* SocketTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		4AA5097C1CBCDBBC008CD7F3 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 4AA509641CBCDB5D008CD7F3 /* CoSocket */;
+			targetProxy = 4AA5097B1CBCDBBC008CD7F3 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		4AA5096C1CBCDB5D008CD7F3 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "-";
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 10.11;
+				MTL_ENABLE_DEBUG_INFO = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		4AA5096D1CBCDB5D008CD7F3 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "-";
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 10.11;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		4AA5096F1CBCDB5D008CD7F3 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				EXECUTABLE_PREFIX = lib;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Debug;
+		};
+		4AA509701CBCDB5D008CD7F3 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				EXECUTABLE_PREFIX = lib;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Release;
+		};
+		4AA5097E1CBCDBBC008CD7F3 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = CoSocketTests/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks @loader_path/../Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = com.codinn.CoSocketTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_OBJC_BRIDGING_HEADER = "CoSocketTests/Bridging-Header.h";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		4AA5097F1CBCDBBC008CD7F3 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = CoSocketTests/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks @loader_path/../Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = com.codinn.CoSocketTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_OBJC_BRIDGING_HEADER = "CoSocketTests/Bridging-Header.h";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		4AA509601CBCDB5D008CD7F3 /* Build configuration list for PBXProject "CoSocket" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4AA5096C1CBCDB5D008CD7F3 /* Debug */,
+				4AA5096D1CBCDB5D008CD7F3 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		4AA5096E1CBCDB5D008CD7F3 /* Build configuration list for PBXNativeTarget "CoSocket" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4AA5096F1CBCDB5D008CD7F3 /* Debug */,
+				4AA509701CBCDB5D008CD7F3 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+		};
+		4AA5097D1CBCDBBC008CD7F3 /* Build configuration list for PBXNativeTarget "CoSocketTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4AA5097E1CBCDBBC008CD7F3 /* Debug */,
+				4AA5097F1CBCDBBC008CD7F3 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 4AA5095D1CBCDB5D008CD7F3 /* Project object */;
+}
