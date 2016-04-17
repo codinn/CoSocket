@@ -490,7 +490,6 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
     
     if (theData.length <= 0) {
         if (errPtr) *errPtr = [self otherError:@"Socket write data length must bigger than zero"];
-        [self disconnect];
         return NO;
     }
     

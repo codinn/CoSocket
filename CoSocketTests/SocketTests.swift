@@ -173,6 +173,8 @@ class SocketTests: XCTestCase {
         } catch let error as NSError {
             XCTFail(error.description)
         }
+        
+        XCTAssertTrue(socket.isConnected)
     }
     
     func testWriteEmptyData() {
@@ -183,6 +185,7 @@ class SocketTests: XCTestCase {
             try socket.connectToHost(targetHost, onPort: self.echoPort, withTimeout: 0)
             try socket.writeData(echoData)
         } catch _ as NSError {
+            XCTAssertTrue(socket.isConnected)
             return
         }
         
