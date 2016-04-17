@@ -21,6 +21,8 @@ class SocketTests: XCTestCase {
     let ipv4Address = "127.0.0.1"
     let ipv6Address = "::1"
     let targetHost = "localhost"
+    let ipv4Local = "127.0.0.1"
+    let ipv6Local = "::1"
     
     func startEchoServer() {
         let echoServer = NSBundle(forClass: self.dynamicType).pathForResource("echo_server.py", ofType: "");
@@ -227,6 +229,25 @@ class SocketTests: XCTestCase {
         }
     }
     
+    func testReadToDataUntilTimeout() {
+        let socket = CoSocket()
+        let echoData = "Hello world!".dataUsingEncoding(NSUTF8StringEncoding)
+        let waitData = "Timeout!".dataUsingEncoding(NSUTF8StringEncoding)
+        
+        do {
+            try socket.connectToHost(targetHost, onPort: self.echoPort, withTimeout: 1.0)
+            try socket.writeData(echoData)
+            
+            let echoBackData = try socket.readDataToData(waitData)
+            XCTAssertEqual(waitData, echoBackData)
+        } catch let error as NSError {
+            XCTAssertEqual(error.code, Int(ETIMEDOUT), error.description)
+            return
+        }
+        
+        XCTFail("Read operation should timed out")
+    }
+    
     func testReadToLength() {
         let socket = CoSocket()
         let echoData = "Hello world!".dataUsingEncoding(NSUTF8StringEncoding)
@@ -240,6 +261,24 @@ class SocketTests: XCTestCase {
         } catch let error as NSError {
             XCTFail(error.description)
         }
+    }
+    
+    func testReadToLengthUntilTimeout() {
+        let socket = CoSocket()
+        let echoData = "Hello world!".dataUsingEncoding(NSUTF8StringEncoding)
+        
+        do {
+            try socket.connectToHost(targetHost, onPort: self.echoPort, withTimeout: 1.0)
+            try socket.writeData(echoData)
+            
+            let echoBackData = try socket.readDataToLength(UInt((echoData?.length)!) * 2)
+            XCTAssertEqual(echoData, echoBackData)
+        } catch let error as NSError {
+            XCTAssertEqual(error.code, Int(ETIMEDOUT), error.description)
+            return
+        }
+        
+        XCTFail("Read operation should timed out")
     }
     
     func testReadAfterDisconnect() {
@@ -375,5 +414,42 @@ class SocketTests: XCTestCase {
         
         XCTAssertEqual(socket.connectedHost, ipv6Address)
         XCTAssertEqual(socket.connectedPort, self.echoPort)
+    }
+    
+    // MARK: - Local Host / Port
+    
+    func testLocalHostPort() {
+        let socket = CoSocket()
+        
+        XCTAssertNil(socket.localHost)
+        XCTAssertEqual(socket.localPort, 0)
+        
+        do {
+            try socket.connectToHost(ipv4Address, onPort: self.echoPort, withTimeout: 0)
+            try readWriteVerifyOnSocket(socket)
+        } catch let error as NSError {
+            XCTFail(error.description)
+        }
+        
+        XCTAssertEqual(socket.localHost, ipv4Local)
+        XCTAssertNotEqual(socket.localPort, 0)
+    }
+    
+    func testLocalHostPortWithIPv6Prefered() {
+        let socket = CoSocket()
+        socket.IPv4PreferredOverIPv6 = false
+        
+        XCTAssertNil(socket.localHost)
+        XCTAssertEqual(socket.localPort, 0)
+        
+        do {
+            try socket.connectToHost(targetHost, onPort: self.echoPort, withTimeout: 0)
+            try readWriteVerifyOnSocket(socket)
+        } catch let error as NSError {
+            XCTFail(error.description)
+        }
+        
+        XCTAssertEqual(socket.localHost, ipv6Local)
+        XCTAssertNotEqual(socket.localPort, 0)
     }
 }
