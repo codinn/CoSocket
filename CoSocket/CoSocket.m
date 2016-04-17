@@ -71,7 +71,7 @@ static struct timeval get_timeval(NSTimeInterval interval);
 static NSTimeInterval get_interval(struct timeval tv);
 #endif
 
-static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t address_len, struct timeval timeout, CoSocketLogHandler logDebug);
+static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t address_len, struct timeval * timeout, CoSocketLogHandler logDebug);
 
 
 @interface CoSocket () {
@@ -277,9 +277,13 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
     fcntl(_socketFD, F_SETFL, O_NONBLOCK);
     
     struct timeval timeout = get_timeval(_timeout);
+    struct timeval *timeoutPtr = NULL;
+    if (_timeout>0) {
+        timeoutPtr = &timeout;
+    }
     
     // Connect the socket using the given timeout.
-    if (connect_timeout(_socketFD, (const struct sockaddr *)address.bytes, (socklen_t)address.length, timeout, _logDebug) < 0) {
+    if (connect_timeout(_socketFD, (const struct sockaddr *)address.bytes, (socklen_t)address.length, timeoutPtr, _logDebug) < 0) {
         if (errPtr) *errPtr = [self errnoError];
         [self disconnect];
         return NO;
@@ -494,6 +498,10 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
     ssize_t index = 0;
     
     struct timeval timeout = get_timeval(_timeout);
+    struct timeval *timeoutPtr = NULL;
+    if (_timeout>0) {
+        timeoutPtr = &timeout;
+    }
     
     while (index < theData.length) {
         /* We must set all this information on each select we do */
@@ -508,7 +516,7 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
         /* readfds = we are not waiting for readfds */
         /* writefds = &writemask */
         /* exceptfds = we are not waiting for exception fds */
-        int select_result = select(_socketFD+1, NULL, &writemask, NULL, &timeout);
+        int select_result = select(_socketFD+1, NULL, &writemask, NULL, timeoutPtr);
         
         if (select_result==-1) {
             if (errPtr) *errPtr = [self errnoError];
@@ -561,6 +569,10 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
     }
     
     struct timeval timeout = get_timeval(_timeout);
+    struct timeval *timeoutPtr = NULL;
+    if (_timeout>0) {
+        timeoutPtr = &timeout;
+    }
     
     ssize_t hasRead = 0;
     while (hasRead < length) {
@@ -576,7 +588,7 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
         /* readfds = &readmask */
         /* writefds = we are not waiting for writefds */
         /* exceptfds = we are not waiting for exception fds */
-        int select_result = select(_socketFD+1, &readmask, NULL, NULL, &timeout);
+        int select_result = select(_socketFD+1, &readmask, NULL, NULL, timeoutPtr);
         if (select_result==-1) {    // On error
             if (errPtr) *errPtr = [self errnoError];
             [self disconnect];
@@ -636,6 +648,10 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
     NSUInteger terminal     = data.length;
     
     struct timeval timeout = get_timeval(_timeout);
+    struct timeval *timeoutPtr = NULL;
+    if (_timeout>0) {
+        timeoutPtr = &timeout;
+    }
     
     while (cursor < terminal) {
         /* We must set all this information on each select we do */
@@ -650,7 +666,7 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
         /* readfds = &readmask */
         /* writefds = we are not waiting for writefds */
         /* exceptfds = we are not waiting for exception fds */
-        int select_result = select(_socketFD+1, &readmask, NULL, NULL, &timeout);
+        int select_result = select(_socketFD+1, &readmask, NULL, NULL, timeoutPtr);
         if (select_result==-1) {
             if (errPtr) *errPtr = [self errnoError];
             [self disconnect];
@@ -1165,7 +1181,7 @@ static NSTimeInterval get_interval(struct timeval tv)
  This method is adapted from section 16.3 in Unix Network Programming (2003) by Richard Stevens et al.
  See http://books.google.com/books?id=ptSC4LpwGA0C&lpg=PP1&pg=PA448
  */
-static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t address_len, struct timeval timeout, CoSocketLogHandler logDebug)
+static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t address_len, struct timeval * timeout, CoSocketLogHandler logDebug)
 {
 	int error = 0;
 	
@@ -1190,7 +1206,7 @@ static int connect_timeout(int sockfd, const struct sockaddr *address, socklen_t
 	FD_SET(sockfd, &rset);
 	wset = rset;
     
-    result = select(sockfd + 1, &rset, &wset, NULL, &timeout);
+    result = select(sockfd + 1, &rset, &wset, NULL, timeout);
     
     if (result==-1) {
         if (logDebug) logDebug(@"Socket select() failed");
